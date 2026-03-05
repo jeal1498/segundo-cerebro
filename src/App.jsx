@@ -92,6 +92,7 @@ const initData = () => ({
     {id:uid(),name:'Leer 30 min',frequency:'daily',completions:[]},
     {id:uid(),name:'Ejercicio',frequency:'daily',completions:[]},
   ],
+  budget:[],
 });
 
 // ===================== BASE COMPONENTS =====================
@@ -259,7 +260,7 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
           const objCount=data.objectives.filter(o=>o.areaId===a.id).length;
           const projCount=data.projects.filter(p=>p.areaId===a.id).length;
           return (
-            <Card key={a.id} onClick={()=>onNavigate&&onNavigate('objectives',`area:${a.id}`)}
+            <Card key={a.id} onClick={()=>onNavigate&&onNavigate('areaDetail',a.id)}
               style={{borderLeft:`4px solid ${a.color}`,position:'relative',cursor:'pointer'}}>
               <div style={{fontSize:isMobile?24:28,marginBottom:8}}>{a.icon}</div>
               <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:4}}>{a.name}</div>
@@ -267,7 +268,7 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
                 <span style={{fontSize:11,color:T.muted,background:T.surface2,padding:'2px 8px',borderRadius:20}}>{objCount} obj</span>
                 <span style={{fontSize:11,color:T.muted,background:T.surface2,padding:'2px 8px',borderRadius:20}}>{projCount} proy</span>
               </div>
-              <div style={{fontSize:10,color:T.accent,fontWeight:500}}>Ver objetivos →</div>
+              <div style={{fontSize:10,color:T.accent,fontWeight:500}}>Ver detalle →</div>
               <button onClick={e=>{e.stopPropagation();del(a.id);}} style={{position:'absolute',top:10,right:10,background:'none',border:'none',color:T.dim,cursor:'pointer',padding:6,display:'flex'}}><Icon name="trash" size={14}/></button>
             </Card>
           );
@@ -295,6 +296,158 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
               </div>
             </div>
             <Btn onClick={saveArea} style={{width:'100%',justifyContent:'center'}}>Crear área</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+// ===================== AREA DETAIL =====================
+const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) => {
+  const areaId=viewHint||'';
+  const area=data.areas.find(a=>a.id===areaId);
+  const [budgetModal,setBudgetModal]=useState(false);
+  const [budgetForm,setBudgetForm]=useState({title:'',amount:'',dayOfMonth:'',currency:'MXN'});
+
+  useEffect(()=>{if(viewHint)onConsumeHint?.();},[viewHint]);
+
+  if(!area) return <div style={{textAlign:'center',padding:40,color:T.dim}}>Área no encontrada</div>;
+
+  const areaObjectives=data.objectives.filter(o=>o.areaId===areaId);
+  const areaProjects=data.projects.filter(p=>p.areaId===areaId);
+  const areaNotes=data.notes.filter(n=>n.areaId===areaId).sort((a,b)=>b.createdAt>a.createdAt?1:-1);
+  const notesWithAmount=areaNotes.filter(n=>n.amount);
+  const totalSpent=notesWithAmount.reduce((s,n)=>s+(n.amount||0),0);
+  const areaBudget=(data.budget||[]).filter(b=>b.areaId===areaId);
+  const totalBudget=areaBudget.reduce((s,b)=>s+(b.amount||0),0);
+
+  const saveBudgetItem=()=>{
+    if(!budgetForm.title.trim()||!budgetForm.amount)return;
+    const b={id:uid(),title:budgetForm.title,amount:Number(budgetForm.amount),currency:budgetForm.currency||'MXN',dayOfMonth:Number(budgetForm.dayOfMonth)||1,areaId,createdAt:today()};
+    const upd=[b,...(data.budget||[])];
+    setData(d=>({...d,budget:upd}));save('budget',upd);
+    setBudgetModal(false);setBudgetForm({title:'',amount:'',dayOfMonth:'',currency:'MXN'});
+  };
+  const delBudget=(id)=>{const u=(data.budget||[]).filter(b=>b.id!==id);setData(d=>({...d,budget:u}));save('budget',u);};
+
+  // Group spending by month
+  const spendingByMonth={};
+  notesWithAmount.forEach(n=>{
+    const m=n.createdAt?.slice(0,7)||'sin-fecha';
+    if(!spendingByMonth[m])spendingByMonth[m]={total:0,items:[]};
+    spendingByMonth[m].total+=n.amount;
+    spendingByMonth[m].items.push(n);
+  });
+
+  return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <div style={{width:44,height:44,borderRadius:12,background:`${area.color}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}>{area.icon}</div>
+        <div style={{flex:1}}>
+          <h2 style={{margin:0,color:T.text,fontSize:isMobile?20:24,fontWeight:700}}>{area.name}</h2>
+          <p style={{color:T.muted,fontSize:12,margin:0}}>{areaObjectives.length} objetivos · {areaProjects.length} proyectos · {areaNotes.length} notas</p>
+        </div>
+      </div>
+
+      {/* Quick nav */}
+      <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
+        <Btn size="sm" onClick={()=>onNavigate&&onNavigate('objectives',`area:${areaId}`)}><Icon name="target" size={12}/>Objetivos ({areaObjectives.length})</Btn>
+        <Btn size="sm" onClick={()=>onNavigate&&onNavigate('projects',areaProjects[0]?`obj:${areaProjects[0].objectiveId}`:null)}><Icon name="folder" size={12}/>Proyectos ({areaProjects.length})</Btn>
+      </div>
+
+      {/* Financial Summary */}
+      {(notesWithAmount.length>0||areaBudget.length>0)&&(
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(3,1fr)',gap:10,marginBottom:20}}>
+          <Card style={{textAlign:'center',padding:14}}>
+            <div style={{fontSize:11,color:T.muted,marginBottom:4}}>Gastado</div>
+            <div style={{fontSize:22,fontWeight:700,color:T.red}}>${totalSpent.toLocaleString()}</div>
+            <div style={{fontSize:10,color:T.dim}}>{notesWithAmount.length} registros</div>
+          </Card>
+          <Card style={{textAlign:'center',padding:14}}>
+            <div style={{fontSize:11,color:T.muted,marginBottom:4}}>Presupuesto/mes</div>
+            <div style={{fontSize:22,fontWeight:700,color:T.accent}}>${totalBudget.toLocaleString()}</div>
+            <div style={{fontSize:10,color:T.dim}}>{areaBudget.length} items fijos</div>
+          </Card>
+          {!isMobile&&<Card style={{textAlign:'center',padding:14}}>
+            <div style={{fontSize:11,color:T.muted,marginBottom:4}}>Este mes</div>
+            <div style={{fontSize:22,fontWeight:700,color:T.text}}>${(spendingByMonth[today().slice(0,7)]?.total||0).toLocaleString()}</div>
+            <div style={{fontSize:10,color:T.dim}}>{spendingByMonth[today().slice(0,7)]?.items?.length||0} gastos</div>
+          </Card>}
+        </div>
+      )}
+
+      {/* Budget items */}
+      <div style={{marginBottom:24}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>💳 Presupuesto fijo</h3>
+          <Btn size="sm" onClick={()=>setBudgetModal(true)}><Icon name="plus" size={12}/>Agregar</Btn>
+        </div>
+        {areaBudget.length===0
+          ?<p style={{color:T.dim,fontSize:13,textAlign:'center',padding:'12px 0'}}>Sin gastos fijos. Agregue items recurrentes como renta, escuela, servicios.</p>
+          :areaBudget.map(b=>(
+            <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:8}}>
+              <div style={{flex:1}}>
+                <div style={{color:T.text,fontSize:14,fontWeight:500}}>{b.title}</div>
+                <div style={{color:T.muted,fontSize:11}}>Día {b.dayOfMonth} de cada mes</div>
+              </div>
+              <div style={{color:T.accent,fontWeight:700,fontSize:15}}>${b.amount.toLocaleString()}</div>
+              <button onClick={()=>delBudget(b.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
+            </div>
+          ))
+        }
+      </div>
+
+      {/* Spending history */}
+      {notesWithAmount.length>0&&(
+        <div style={{marginBottom:24}}>
+          <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:'0 0 12px'}}>📊 Historial de gastos</h3>
+          {Object.entries(spendingByMonth).sort(([a],[b])=>b.localeCompare(a)).map(([month,{total,items}])=>(
+            <div key={month} style={{marginBottom:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <span style={{color:T.muted,fontSize:12,fontWeight:600,textTransform:'uppercase'}}>{new Date(month+'-01').toLocaleDateString('es-ES',{month:'long',year:'numeric'})}</span>
+                <span style={{color:T.red,fontSize:13,fontWeight:700}}>−${total.toLocaleString()}</span>
+              </div>
+              {items.map(n=>(
+                <div key={n.id} onClick={()=>onNavigate&&onNavigate('notes',n.id)}
+                  style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:T.surface,borderRadius:8,marginBottom:4,cursor:'pointer',border:`1px solid ${T.border}`}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{color:T.text,fontSize:13,fontWeight:500}}>{n.title}</div>
+                    <div style={{display:'flex',gap:4,marginTop:2}}>
+                      {n.tags?.slice(0,3).map(t=><span key={t} style={{fontSize:9,color:T.accent,background:`${T.accent}15`,padding:'1px 5px',borderRadius:6}}>{t}</span>)}
+                    </div>
+                  </div>
+                  <span style={{color:T.red,fontSize:13,fontWeight:600,flexShrink:0}}>−${n.amount.toLocaleString()}</span>
+                  <span style={{color:T.dim,fontSize:10,flexShrink:0}}>{fmt(n.createdAt)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recent notes without amounts */}
+      {areaNotes.filter(n=>!n.amount).length>0&&(
+        <div>
+          <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:'0 0 12px'}}>📝 Notas</h3>
+          {areaNotes.filter(n=>!n.amount).slice(0,5).map(n=>(
+            <div key={n.id} onClick={()=>onNavigate&&onNavigate('notes',n.id)}
+              style={{padding:'10px 14px',background:T.surface,borderRadius:10,marginBottom:8,cursor:'pointer',border:`1px solid ${T.border}`,borderLeft:`3px solid ${area.color}`}}>
+              <div style={{color:T.text,fontSize:13,fontWeight:500}}>{n.title}</div>
+              <div style={{color:T.muted,fontSize:11,marginTop:3}}>{fmt(n.createdAt)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Budget Modal */}
+      {budgetModal&&(
+        <Modal title="Nuevo gasto fijo" onClose={()=>setBudgetModal(false)}>
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
+            <Input value={budgetForm.title} onChange={v=>setBudgetForm(f=>({...f,title:v}))} placeholder="Concepto (ej: Escuela, Renta, Netflix)"/>
+            <Input type="number" value={budgetForm.amount} onChange={v=>setBudgetForm(f=>({...f,amount:v}))} placeholder="Monto mensual"/>
+            <Input type="number" value={budgetForm.dayOfMonth} onChange={v=>setBudgetForm(f=>({...f,dayOfMonth:v}))} placeholder="Día del mes (1-31)"/>
+            <Btn onClick={saveBudgetItem} style={{width:'100%',justifyContent:'center'}}>Agregar al presupuesto</Btn>
           </div>
         </Modal>
       )}
@@ -780,10 +933,54 @@ const HabitTracker = ({data,setData,isMobile}) => {
   };
   const del=(id)=>{const u=data.habits.filter(h=>h.id!==id);setData(d=>({...d,habits:u}));save('habits',u);};
   const todayStr=today();
+
+  // Compute stats
+  const streaks=data.habits.map(h=>{
+    let s=0,d=new Date();
+    const ld=()=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    while(h.completions.includes(ld())){s++;d.setDate(d.getDate()-1);}
+    return {name:h.name,streak:s};
+  });
+  const todayDone=data.habits.filter(h=>h.completions.includes(todayStr)).length;
+  const todayTotal=data.habits.length;
+  const todayPct=todayTotal?Math.round(todayDone/todayTotal*100):0;
+  const bestStreak=streaks.reduce((max,s)=>s.streak>max?s.streak:max,0);
+  const weekDates=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
+  const weekTotal=data.habits.reduce((s,h)=>s+weekDates.filter(d=>h.completions.includes(d)).length,0);
+  const weekPossible=data.habits.length*7;
+  const weekPct=weekPossible?Math.round(weekTotal/weekPossible*100):0;
+
   return (
     <div>
       <PageHeader title="Habit Tracker" subtitle="Construye rachas diarias 🔥" isMobile={isMobile}
         action={<Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Nuevo</Btn>}/>
+
+      {/* Stats summary */}
+      {data.habits.length>0&&(
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:20}}>
+          <Card style={{textAlign:'center',padding:isMobile?10:14}}>
+            <div style={{fontSize:10,color:T.muted,marginBottom:2}}>Hoy</div>
+            <div style={{fontSize:isMobile?20:24,fontWeight:700,color:todayPct===100?T.green:todayPct>50?T.accent:T.text}}>{todayDone}/{todayTotal}</div>
+            <div style={{height:3,background:T.border,borderRadius:2,marginTop:4}}>
+              <div style={{height:'100%',width:`${todayPct}%`,background:todayPct===100?T.green:T.accent,borderRadius:2,transition:'width 0.3s'}}/>
+            </div>
+          </Card>
+          <Card style={{textAlign:'center',padding:isMobile?10:14}}>
+            <div style={{fontSize:10,color:T.muted,marginBottom:2}}>Mejor racha</div>
+            <div style={{fontSize:isMobile?20:24,fontWeight:700,color:bestStreak>=7?T.green:bestStreak>=3?T.accent:T.text}}>🔥 {bestStreak}d</div>
+            <div style={{fontSize:10,color:T.dim,marginTop:4}}>{streaks.find(s=>s.streak===bestStreak)?.name||''}</div>
+          </Card>
+          <Card style={{textAlign:'center',padding:isMobile?10:14}}>
+            <div style={{fontSize:10,color:T.muted,marginBottom:2}}>Semana</div>
+            <div style={{fontSize:isMobile?20:24,fontWeight:700,color:weekPct>=80?T.green:weekPct>=50?T.accent:T.text}}>{weekPct}%</div>
+            <div style={{height:3,background:T.border,borderRadius:2,marginTop:4}}>
+              <div style={{height:'100%',width:`${weekPct}%`,background:weekPct>=80?T.green:T.accent,borderRadius:2,transition:'width 0.3s'}}/>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Habit grid */}
       <div style={{background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,overflow:'hidden'}}>
         <div style={{display:'grid',gridTemplateColumns:`${nameColW} repeat(${numDays},1fr)`,borderBottom:`1px solid ${T.border}`}}>
           <div style={{padding:'10px 14px',color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>Hábito</div>
@@ -795,13 +992,17 @@ const HabitTracker = ({data,setData,isMobile}) => {
           ))}
         </div>
         {data.habits.map(h=>{
-          const streak=(()=>{let s=0,d=new Date();const ld=()=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;while(h.completions.includes(ld())){s++;d.setDate(d.getDate()-1);}return s;})();
+          const streak=streaks.find(s=>s.name===h.name)?.streak||0;
+          const weekDone=weekDates.filter(d=>h.completions.includes(d)).length;
           return (
             <div key={h.id} style={{display:'grid',gridTemplateColumns:`${nameColW} repeat(${numDays},1fr)`,borderBottom:`1px solid ${T.border}`}}>
               <div style={{padding:'12px 10px 12px 14px',display:'flex',alignItems:'center',gap:6}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{color:T.text,fontSize:12,fontWeight:500,lineHeight:1.3,wordBreak:'break-word'}}>{h.name}</div>
-                  {streak>0&&<div style={{color:T.accent,fontSize:10,marginTop:2}}>🔥 {streak}d</div>}
+                  <div style={{display:'flex',gap:6,marginTop:2}}>
+                    {streak>0&&<span style={{color:T.accent,fontSize:10}}>🔥 {streak}d</span>}
+                    <span style={{color:weekDone>=5?T.green:T.dim,fontSize:10}}>{weekDone}/7 sem</span>
+                  </div>
                 </div>
                 <button onClick={()=>del(h.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2,display:'flex',flexShrink:0}}><Icon name="trash" size={12}/></button>
               </div>
@@ -818,7 +1019,14 @@ const HabitTracker = ({data,setData,isMobile}) => {
             </div>
           );
         })}
-        {!data.habits.length&&<div style={{padding:'30px',textAlign:'center',color:T.dim}}>Sin hábitos. ¡Empieza hoy!</div>}
+        {!data.habits.length&&(
+          <div style={{padding:'40px 20px',textAlign:'center',color:T.dim}}>
+            <div style={{fontSize:40,marginBottom:8}}>🔥</div>
+            <p style={{margin:'0 0 4px',fontSize:14}}>Sin hábitos aún</p>
+            <p style={{margin:'0 0 12px',fontSize:12,color:T.muted}}>Los hábitos se construyen un día a la vez. Empiece con uno pequeño.</p>
+            <Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={12}/>Crear primer hábito</Btn>
+          </div>
+        )}
       </div>
       {modal&&(
         <Modal title="Nuevo hábito" onClose={()=>setModal(false)}>
@@ -930,14 +1138,14 @@ const Settings = ({apiKey,setApiKey,isMobile}) => {
 // ===================== PSICKE — FLOATING BRAIN =====================
 const buildPsickePrompt=(data)=>{
   const t=today();
-  const notesSummary=data.notes.slice(0,15).map(n=>{
-    let s=`• ${n.title}`;
-    if(n.amount)s+=` ($${n.amount})`;
-    if(n.tags?.length)s+=` [${n.tags.join(',')}]`;
+  const notesSummary=data.notes.slice(0,8).map(n=>{
+    let s=`• ${n.title.slice(0,40)}`;
+    if(n.amount)s+=` $${n.amount}`;
+    if(n.tags?.length)s+=` [${n.tags.slice(0,2).join(',')}]`;
     return s;
   }).join('\n');
   const tasksPending=data.tasks.filter(t=>t.status==='todo');
-  const tasksSummary=tasksPending.slice(0,10).map(t=>`• ${t.title}${t.deadline?' ('+t.deadline+')':''}`).join('\n');
+  const tasksSummary=tasksPending.slice(0,6).map(t=>`• ${t.title.slice(0,40)}${t.deadline?' ('+t.deadline+')':''}`).join('\n');
   const inboxPending=data.inbox.filter(i=>!i.processed);
   const habitNames=data.habits.map(h=>h.name).join(', ');
   const areaNames=data.areas.map(a=>`${a.icon} ${a.name}`).join(', ');
@@ -945,7 +1153,7 @@ const buildPsickePrompt=(data)=>{
   const objectives=data.objectives.filter(o=>o.status==='active').map(o=>`• ${o.title}`).join('\n');
 
   // Collect existing tags for consistency
-  const allTags=[...new Set(data.notes.flatMap(n=>n.tags||[]))].slice(0,30);
+  const allTags=[...new Set(data.notes.flatMap(n=>n.tags||[]))].slice(0,15);
   const tagList=allTags.length?allTags.join(', '):'(sin tags aún)';
 
   return `Eres Psicke — la IA que vive dentro del Segundo Cerebro del usuario. No eres un chatbot genérico; eres SU extensión mental.
@@ -982,6 +1190,9 @@ ${notesSummary || '(sin notas)'}
 Tags existentes: ${tagList}
 Inbox sin procesar: ${inboxPending.length} items
 Hábitos: ${habitNames || '(sin hábitos)'}
+
+Presupuesto fijo (gastos recurrentes):
+${data.budget?.length?data.budget.map(b=>`• ${b.title}: $${b.amount} ${b.currency||'MXN'} — día ${b.dayOfMonth} de cada mes`).join('\n'):'(sin presupuesto aún)'}
 
 ═══ PROTOCOLO DE CLASIFICACIÓN INTELIGENTE ═══
 NUNCA mandes al inbox algo que ya puedas clasificar. Piensa así:
@@ -1031,6 +1242,14 @@ Inbox (solo si es ambiguo): \`\`\`json
 {"action":"SAVE_INBOX","data":{"content":"captura rápida"}}
 \`\`\`
 
+Presupuesto (gasto recurrente mensual): \`\`\`json
+{"action":"SAVE_BUDGET","data":{"title":"Escuela","amount":1500,"currency":"MXN","dayOfMonth":9,"area":"Finanzas"}}
+\`\`\`
+
+Hábito nuevo: \`\`\`json
+{"action":"SAVE_HABIT","data":{"name":"Caminar 30 min","frequency":"daily"}}
+\`\`\`
+
 ═══ PROTOCOLO DE PLANIFICACIÓN ═══
 Cuando el usuario pida algo grande como "quiero bajar de peso", "pon en mis objetivos...", "planéame...", "quiero lograr...", "ayúdame a organizar...":
 
@@ -1078,7 +1297,7 @@ Si el usuario pregunta "¿cuánto he gastado en X?", "¿qué notas tengo de Y?",
 - Agrupa por tags o área cuando sea relevante.
 
 ═══ REGLAS GENERALES ═══
-- Solo UNA acción JSON por mensaje.
+- Solo UNA acción JSON por mensaje (SAVE_TASK, SAVE_NOTE, SAVE_INBOX, SAVE_BUDGET, SAVE_HABIT, o SAVE_PLAN).
 - El JSON va DESPUÉS de la respuesta conversacional.
 - Si no tiene suficiente info, pregunte antes de generar JSON.
 - NUNCA invente datos que el usuario no dijo.
@@ -1151,27 +1370,50 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
     saveMsgs(next);setInput('');setLoading(true);
     try{
       const sysPrompt=buildPsickePrompt(data);
+      // Clean conversation for API: strip save labels, keep last 8 msgs, compress
+      const cleanMsgs=next.slice(-8).map(m=>({
+        role:m.role==='assistant'?'model':'user',
+        parts:[{text:(m.content||'').replace(/\n\n✅[^\n]*/g,'').trim()||' '}]
+      }));
       const body={
         contents:[
           {role:'user',parts:[{text:`[SISTEMA]\n${sysPrompt}\n\n[Confirma tu rol brevemente]`}]},
           {role:'model',parts:[{text:'Aquí Psicke. ¿En qué está pensando?'}]},
-          ...next.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
+          ...cleanMsgs
         ],
         generationConfig:{temperature:0.8,maxOutputTokens:1200},
       };
-      const res=await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
-        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}
-      );
-      if(!res.ok){
-        const err=await res.json().catch(()=>({}));
-        const emsg=err?.error?.message||`HTTP ${res.status}`;
-        if(res.status===429||emsg.toLowerCase().includes('quota'))
-          throw new Error('Cuota agotada. Espera unos minutos o revisa tu plan en ai.google.dev/rate-limit');
-        throw new Error(emsg);
+
+      // API call with one retry on 429
+      const callApi=async(attempt=0)=>{
+        const res=await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
+          {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}
+        );
+        if(res.status===429&&attempt===0){
+          // Wait 3s and retry once
+          await new Promise(r=>setTimeout(r,3000));
+          return callApi(1);
+        }
+        if(!res.ok){
+          const err=await res.json().catch(()=>({}));
+          const emsg=err?.error?.message||`HTTP ${res.status}`;
+          if(res.status===429||emsg.toLowerCase().includes('quota'))
+            throw new Error('Cuota agotada. Espere unos segundos e intente de nuevo.');
+          throw new Error(emsg);
+        }
+        return res.json();
+      };
+
+      const d=await callApi();
+      // Handle safety blocks
+      const candidate=d.candidates?.[0];
+      if(!candidate?.content?.parts?.[0]?.text){
+        const reason=candidate?.finishReason||d.promptFeedback?.blockReason||'desconocido';
+        if(reason==='SAFETY')throw new Error('Respuesta bloqueada por filtros de seguridad. Intente reformular.');
+        throw new Error(`Sin respuesta (${reason})`);
       }
-      const d=await res.json();
-      const raw=d.candidates?.[0]?.content?.parts?.[0]?.text||'Sin respuesta.';
+      const raw=candidate.content.parts[0].text;
 
       // Parse and execute save action if present
       const action=parsePsickeAction(raw);
@@ -1234,6 +1476,18 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
           const upd=[i,...data.inbox];
           setData(d=>({...d,inbox:upd}));save('inbox',upd);
           savedLabel='📥 Agregado al inbox';
+        }else if(action.action==='SAVE_BUDGET'&&action.data.title){
+          const b={id:uid(),title:action.data.title,amount:Number(action.data.amount)||0,currency:action.data.currency||'MXN',dayOfMonth:Number(action.data.dayOfMonth)||1,
+            areaId:(()=>{if(action.data.areaId)return action.data.areaId;if(action.data.area){const m=data.areas.find(a=>a.name.toLowerCase()===action.data.area.toLowerCase());return m?.id||'';}return '';})(),
+            createdAt:td};
+          const upd=[b,...(data.budget||[])];
+          setData(d=>({...d,budget:upd}));save('budget',upd);
+          savedLabel=`💳 Presupuesto: ${b.title} — $${b.amount}/mes (día ${b.dayOfMonth})`;
+        }else if(action.action==='SAVE_HABIT'&&action.data.name){
+          const h={id:uid(),name:action.data.name,frequency:action.data.frequency||'daily',completions:[]};
+          const upd=[...data.habits,h];
+          setData(d=>({...d,habits:upd}));save('habits',upd);
+          savedLabel=`🔁 Hábito creado: ${h.name}`;
         }
       }
 
@@ -1421,12 +1675,12 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
       const def=initData();
-      const [areas,objectives,projects,tasks,notes,inbox,habits]=await Promise.all([
+      const [areas,objectives,projects,tasks,notes,inbox,habits,budget]=await Promise.all([
         load('areas',def.areas),load('objectives',def.objectives),load('projects',def.projects),
-        load('tasks',def.tasks),load('notes',def.notes),load('inbox',def.inbox),load('habits',def.habits),
+        load('tasks',def.tasks),load('notes',def.notes),load('inbox',def.inbox),load('habits',def.habits),load('budget',def.budget),
       ]);
       const linkedObj=objectives.map(o=>({...o,areaId:o.areaId||areas[0]?.id||''}));
-      setData({areas,objectives:linkedObj,projects,tasks,notes,inbox,habits});
+      setData({areas,objectives:linkedObj,projects,tasks,notes,inbox,habits,budget});
     })();
   },[]);
 
@@ -1441,6 +1695,7 @@ export default function App() {
   const views={
     dashboard:<Dashboard {...props} onNavigate={navigate}/>,
     areas:<Areas {...props} onNavigate={navigate}/>,
+    areaDetail:<AreaDetail {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
     objectives:<Objectives {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
     projects:<ProjectsAndTasks {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
     notes:<Notes {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
