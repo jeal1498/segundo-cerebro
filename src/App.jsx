@@ -1193,9 +1193,16 @@ ${data.budget?.length?data.budget.map(b=>`• ${b.title}: $${b.amount} ${b.curre
 
 ╔═══════════════════════════════════════════════════╗
 ║   PROTOCOLO DE RAZONAMIENTO INTERNO OBLIGATORIO   ║
-║   Ejecuta este árbol en silencio antes de         ║
-║   escribir CUALQUIER respuesta al usuario.        ║
-║   El usuario NUNCA ve este proceso.               ║
+║                                                   ║
+║  FORMATO OBLIGATORIO DE CADA RESPUESTA:           ║
+║  <pensamiento>                                    ║
+║    [razonamiento interno paso a paso]             ║
+║  </pensamiento>                                   ║
+║  [respuesta visible al usuario]                   ║
+║                                                   ║
+║  Las etiquetas <pensamiento> se eliminan          ║
+║  automáticamente — el usuario NO las ve.          ║
+║  SIEMPRE empieza con <pensamiento>.               ║
 ╚═══════════════════════════════════════════════════╝
 
 PASO I — TIPO DE ENTRADA
@@ -1295,13 +1302,19 @@ PASO IV-SIMPLE — FLUJO PARA CAPTURAS INDIVIDUALES
 
 ──────────────────────────────────────────────────────
 PASO V — RESPONDER AL USUARIO
-Ahora sí, escribir la respuesta visible. Reglas:
+Cierra el bloque </pensamiento> y escribe la respuesta visible. Estructura exacta:
 
-  - Respuesta conversacional PRIMERO (máx 2-3 oraciones, excepto planes).
-  - Si se guarda algo → confirmarlo brevemente en la respuesta.
-  - JSON de acción AL FINAL, después del texto (nunca antes, nunca en medio).
+  <pensamiento>
+    [todo el razonamiento de los pasos anteriores]
+  </pensamiento>
+  [respuesta conversacional al usuario, máx 2-3 oraciones excepto planes]
+  [bloque ```json si aplica, siempre AL FINAL]
+
+  Reglas:
+  - El texto conversacional va FUERA de <pensamiento>, ANTES del JSON.
+  - JSON de acción SIEMPRE al final, nunca en medio del texto.
   - Solo UN bloque JSON por mensaje.
-  - NUNCA explicar el proceso interno al usuario.
+  - NUNCA mencionar ni resumir el proceso interno al usuario.
   - NUNCA inventar datos que el usuario no proporcionó.
   - NUNCA tutear. Siempre de usted.
 
@@ -1374,7 +1387,7 @@ const parsePsickeAction=(text)=>{
   }catch(e){}
   return null;
 };
-const stripPsickeJson=(text)=>text.replace(/\`\`\`json[\s\S]*?\`\`\`/g,'').trim();
+const stripPsickeJson=(text)=>text.replace(/<pensamiento>[\s\S]*?<\/pensamiento>/gi,'').replace(/\`\`\`json[\s\S]*?\`\`\`/g,'').trim();
 
 const Psicke=({apiKey,onGoSettings,data,setData})=>{
   const INIT_MSG={role:'assistant',content:'Aquí Psicke. ¿En qué está pensando?'};
