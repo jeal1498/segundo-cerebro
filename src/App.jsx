@@ -692,7 +692,7 @@ const HabitTracker = ({data,setData,isMobile}) => {
 };
 
 // ===================== AI ASSISTANT =====================
-const GEMINI_MODEL='gemini-1.5-flash';
+const GEMINI_MODEL='gemini-2.0-flash';
 const TODAY_DATE=new Date().toISOString().split('T')[0];
 
 const buildSystemPrompt=(ctx)=>`Eres el "Segundo Cerebro" — un asistente de memoria personal brutalmente eficiente, directo, y con humor ácido cuando el usuario es vago.
@@ -777,7 +777,7 @@ const AIAssistant = ({data,setData,isMobile,apiKey,onGoSettings}) => {
       parts.push({text:m.content||' '});
       return{role:m.role==='assistant'?'model':'user',parts};
     });
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         system_instruction:{parts:[{text:buildSystemPrompt(buildCtx())}]},
@@ -1038,7 +1038,7 @@ const MORE_NAV=NAV.slice(5);
 
 // ===================== MAIN APP =====================
 export default function App() {
-  const [view,setView]=useState('dashboard');
+  const [view,setView]=useState('ai');
   const [data,setData]=useState(null);
   const [showMore,setShowMore]=useState(false);
   const [apiKey,setApiKey]=useState(()=>localStorage.getItem('sb_gemini_key')||'');
