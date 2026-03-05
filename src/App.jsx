@@ -73,7 +73,7 @@ const Icon = ({ name, size = 18, color }) => {
 
 // ===================== HELPERS =====================
 const uid = () => Math.random().toString(36).slice(2,10);
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const fmt = (d) => d ? new Date(d).toLocaleDateString('es-ES',{day:'2-digit',month:'short'}) : '';
 
 // ===================== INITIAL DATA =====================
@@ -749,7 +749,7 @@ const HabitTracker = ({data,setData,isMobile}) => {
   const nameColW=isMobile?'130px':'160px';
   const days=Array.from({length:numDays},(_,i)=>{
     const d=new Date();d.setDate(d.getDate()-(numDays-1)+i);
-    return {date:d.toISOString().split('T')[0],label:d.toLocaleDateString('es-ES',{weekday:'short'}),day:d.getDate()};
+    return {date:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,label:d.toLocaleDateString('es-ES',{weekday:'short'}),day:d.getDate()};
   });
   const toggle=(habitId,date)=>{
     const updated=data.habits.map(h=>{
@@ -782,7 +782,7 @@ const HabitTracker = ({data,setData,isMobile}) => {
           ))}
         </div>
         {data.habits.map(h=>{
-          const streak=(()=>{let s=0,d=new Date();while(h.completions.includes(d.toISOString().split('T')[0])){s++;d.setDate(d.getDate()-1);}return s;})();
+          const streak=(()=>{let s=0,d=new Date();const ld=()=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;while(h.completions.includes(ld())){s++;d.setDate(d.getDate()-1);}return s;})();
           return (
             <div key={h.id} style={{display:'grid',gridTemplateColumns:`${nameColW} repeat(${numDays},1fr)`,borderBottom:`1px solid ${T.border}`}}>
               <div style={{padding:'12px 10px 12px 14px',display:'flex',alignItems:'center',gap:6}}>
@@ -916,7 +916,7 @@ const Settings = ({apiKey,setApiKey,isMobile}) => {
 
 // ===================== PSICKE — FLOATING BRAIN =====================
 const buildPsickePrompt=(data)=>{
-  const t=new Date().toISOString().split('T')[0];
+  const t=today();
   const notesSummary=data.notes.slice(0,10).map(n=>`• ${n.title}`).join('\n');
   const tasksPending=data.tasks.filter(t=>t.status==='todo');
   const tasksSummary=tasksPending.slice(0,10).map(t=>`• ${t.title}${t.deadline?' ('+t.deadline+')':''}`).join('\n');
@@ -1133,7 +1133,7 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
       let savedLabel=null;
 
       if(action&&setData){
-        const td=new Date().toISOString().split('T')[0];
+        const td=today();
         if(action.action==='SAVE_PLAN'&&action.data.objective){
           // Create full connected plan: area match → objective → project → tasks + habits
           const plan=action.data;
