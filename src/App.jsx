@@ -179,24 +179,47 @@ const Dashboard = ({data,isMobile,onNavigate}) => {
       </div>
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:16}}>
         <div>
-          <h3 style={{color:T.text,fontSize:14,fontWeight:600,marginBottom:12,marginTop:0}}>Próximas tareas</h3>
-          {pendingList.length===0?<p style={{color:T.dim,fontSize:13}}>¡Sin tareas pendientes! 🎉</p>:
-            pendingList.map(t=>(
-              <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',marginBottom:10,padding:'10px 12px',background:T.surface,borderRadius:10}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>Próximas tareas</h3>
+            <button onClick={()=>onNavigate&&onNavigate('projects',null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>Ver todas</button>
+          </div>
+          {pendingList.length===0
+            ?<div style={{textAlign:'center',padding:'16px 0'}}>
+               <p style={{color:T.dim,fontSize:13,margin:'0 0 8px'}}>¡Sin tareas pendientes! 🎉</p>
+               <button onClick={()=>onNavigate&&onNavigate('projects',null)} style={{background:`${T.accent}18`,border:`1px solid ${T.accent}40`,borderRadius:8,padding:'6px 14px',cursor:'pointer',color:T.accent,fontSize:12,fontFamily:'inherit',fontWeight:600}}>+ Nueva tarea</button>
+             </div>
+            :pendingList.map(t=>(
+              <div key={t.id} onClick={()=>onNavigate&&onNavigate('projects','pending')}
+                style={{display:'flex',gap:8,alignItems:'flex-start',marginBottom:8,padding:'10px 12px',background:T.surface,borderRadius:10,cursor:'pointer',border:`1px solid ${T.border}`,transition:'border-color 0.15s'}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
                 <div style={{width:8,height:8,borderRadius:'50%',background:t.priority==='alta'?T.red:t.priority==='media'?T.accent:T.green,marginTop:5,flexShrink:0}}/>
-                <span style={{color:T.text,fontSize:13}}>{t.title}</span>
+                <span style={{color:T.text,fontSize:13,flex:1}}>{t.title}</span>
+                {t.dueDate&&<span style={{color:T.muted,fontSize:11,flexShrink:0}}>{fmt(t.dueDate)}</span>}
               </div>
             ))
           }
         </div>
         <div>
-          <h3 style={{color:T.text,fontSize:14,fontWeight:600,marginBottom:12,marginTop:isMobile?16:0}}>Notas recientes</h3>
-          {recentNotes.map(n=>(
-            <div key={n.id} style={{marginBottom:10,padding:'12px 14px',background:T.surface2,borderRadius:10,borderLeft:`3px solid ${T.accent}`}}>
-              <div style={{color:T.text,fontSize:13,fontWeight:500}}>{n.title}</div>
-              <div style={{color:T.muted,fontSize:11,marginTop:3}}>{fmt(n.createdAt)}</div>
-            </div>
-          ))}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,marginTop:isMobile?16:0}}>
+            <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>Notas recientes</h3>
+            <button onClick={()=>onNavigate&&onNavigate('notes',null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>Ver todas</button>
+          </div>
+          {recentNotes.length===0
+            ?<div style={{textAlign:'center',padding:'16px 0'}}>
+               <p style={{color:T.dim,fontSize:13,margin:'0 0 8px'}}>Sin notas aún</p>
+               <button onClick={()=>onNavigate&&onNavigate('notes',null)} style={{background:`${T.purple}18`,border:`1px solid ${T.purple}40`,borderRadius:8,padding:'6px 14px',cursor:'pointer',color:T.purple,fontSize:12,fontFamily:'inherit',fontWeight:600}}>+ Nueva nota</button>
+             </div>
+            :recentNotes.map(n=>(
+              <div key={n.id} onClick={()=>onNavigate&&onNavigate('notes',n.id)}
+                style={{marginBottom:8,padding:'12px 14px',background:T.surface2,borderRadius:10,borderLeft:`3px solid ${T.accent}`,cursor:'pointer',transition:'opacity 0.15s'}}
+                onMouseEnter={e=>e.currentTarget.style.opacity='0.8'}
+                onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+                <div style={{color:T.text,fontSize:13,fontWeight:500}}>{n.title}</div>
+                <div style={{color:T.muted,fontSize:11,marginTop:3}}>{fmt(n.createdAt)}</div>
+              </div>
+            ))
+          }
         </div>
       </div>
     </div>
@@ -204,7 +227,7 @@ const Dashboard = ({data,isMobile,onNavigate}) => {
 };
 
 // ===================== AREAS =====================
-const Areas = ({data,setData,isMobile}) => {
+const Areas = ({data,setData,isMobile,onNavigate}) => {
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({name:'',icon:'🌟',color:T.areaColors[0]});
   const emojis=['💪','💼','💰','📚','🏠','❤️','🎨','🌍','🎵','⚽','✈️','🍎','🧘','🎯','🔬','💡'];
@@ -217,18 +240,23 @@ const Areas = ({data,setData,isMobile}) => {
   const del=(id)=>{const u=data.areas.filter(a=>a.id!==id);setData(d=>({...d,areas:u}));save('areas',u);};
   return (
     <div>
-      <PageHeader title="Áreas de vida" subtitle="Los grandes pilares de tu vida." isMobile={isMobile}
+      <PageHeader title="Áreas de vida" subtitle="Los grandes pilares de su vida." isMobile={isMobile}
         action={<Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Nueva</Btn>}/>
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(auto-fill,minmax(180px,1fr))',gap:12}}>
         {data.areas.map(a=>{
           const objCount=data.objectives.filter(o=>o.areaId===a.id).length;
           const projCount=data.projects.filter(p=>p.areaId===a.id).length;
           return (
-            <Card key={a.id} style={{borderLeft:`4px solid ${a.color}`,position:'relative'}}>
+            <Card key={a.id} onClick={()=>onNavigate&&onNavigate('objectives',`area:${a.id}`)}
+              style={{borderLeft:`4px solid ${a.color}`,position:'relative',cursor:'pointer'}}>
               <div style={{fontSize:isMobile?24:28,marginBottom:8}}>{a.icon}</div>
               <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:4}}>{a.name}</div>
-              <div style={{color:T.muted,fontSize:11}}>{objCount} obj · {projCount} proy</div>
-              <button onClick={()=>del(a.id)} style={{position:'absolute',top:10,right:10,background:'none',border:'none',color:T.dim,cursor:'pointer',padding:6,display:'flex'}}><Icon name="trash" size={14}/></button>
+              <div style={{display:'flex',gap:8,marginBottom:6}}>
+                <span style={{fontSize:11,color:T.muted,background:T.surface2,padding:'2px 8px',borderRadius:20}}>{objCount} obj</span>
+                <span style={{fontSize:11,color:T.muted,background:T.surface2,padding:'2px 8px',borderRadius:20}}>{projCount} proy</span>
+              </div>
+              <div style={{fontSize:10,color:T.accent,fontWeight:500}}>Ver objetivos →</div>
+              <button onClick={e=>{e.stopPropagation();del(a.id);}} style={{position:'absolute',top:10,right:10,background:'none',border:'none',color:T.dim,cursor:'pointer',padding:6,display:'flex'}}><Icon name="trash" size={14}/></button>
             </Card>
           );
         })}
@@ -263,23 +291,53 @@ const Areas = ({data,setData,isMobile}) => {
 };
 
 // ===================== OBJECTIVES =====================
-const Objectives = ({data,setData,isMobile}) => {
+const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) => {
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({title:'',areaId:'',deadline:'',status:'active'});
+
+  // Parse area filter from hint like "area:someId"
+  const [areaFilter,setAreaFilter]=useState(()=>viewHint?.startsWith('area:')?viewHint.slice(5):null);
+  useEffect(()=>{
+    if(viewHint?.startsWith('area:')){setAreaFilter(viewHint.slice(5));onConsumeHint?.();}
+    else if(viewHint===null){/* don't clear filter on unrelated nav */}
+  },[viewHint]);
+
+  const filteredArea=areaFilter?data.areas.find(a=>a.id===areaFilter):null;
+
   const saveObj=()=>{
     if(!form.title.trim())return;
     const updated=[...data.objectives,{id:uid(),...form}];
     setData(d=>({...d,objectives:updated}));save('objectives',updated);
-    setModal(false);setForm({title:'',areaId:'',deadline:'',status:'active'});
+    setModal(false);setForm({title:'',areaId:areaFilter||'',deadline:'',status:'active'});
   };
   const toggle=(id)=>{const u=data.objectives.map(o=>o.id===id?{...o,status:o.status==='active'?'done':'active'}:o);setData(d=>({...d,objectives:u}));save('objectives',u);};
   const del=(id)=>{const u=data.objectives.filter(o=>o.id!==id);setData(d=>({...d,objectives:u}));save('objectives',u);};
+
+  const allObj=areaFilter
+    ?data.objectives.filter(o=>o.areaId===areaFilter)
+    :data.objectives;
+
   return (
     <div>
-      <PageHeader title="Objetivos" subtitle="Metas concretas con fecha límite." isMobile={isMobile}
-        action={<Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Nuevo</Btn>}/>
+      <div style={{marginBottom:20}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <h2 style={{margin:0,color:T.text,fontSize:isMobile?18:20,fontWeight:700}}>
+              {filteredArea?`${filteredArea.icon} ${filteredArea.name}`:'Objetivos'}
+            </h2>
+            {filteredArea
+              ?<p style={{color:T.muted,fontSize:13,marginTop:4,marginBottom:0}}>
+                  Objetivos de esta área
+                  <button onClick={()=>setAreaFilter(null)} style={{marginLeft:8,background:'none',border:`1px solid ${T.border}`,borderRadius:6,padding:'1px 8px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>✕ Ver todos</button>
+                </p>
+              :<p style={{color:T.muted,fontSize:13,marginTop:4,marginBottom:0}}>Metas concretas con fecha límite.</p>
+            }
+          </div>
+          <Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Nuevo</Btn>
+        </div>
+      </div>
       {['active','done'].map(status=>{
-        const list=data.objectives.filter(o=>o.status===status);
+        const list=allObj.filter(o=>o.status===status);
         if(!list.length)return null;
         return (
           <div key={status} style={{marginBottom:24}}>
@@ -288,9 +346,10 @@ const Objectives = ({data,setData,isMobile}) => {
               const area=data.areas.find(a=>a.id===o.areaId);
               const relProj=data.projects.filter(p=>p.objectiveId===o.id);
               return (
-                <Card key={o.id} style={{marginBottom:10,opacity:status==='done'?0.6:1}}>
+                <Card key={o.id} style={{marginBottom:10,opacity:status==='done'?0.6:1,cursor:'pointer'}}
+                  onClick={()=>onNavigate&&onNavigate('projects',`obj:${o.id}`)}>
                   <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
-                    <button onClick={()=>toggle(o.id)} style={{width:24,height:24,borderRadius:'50%',border:`2px solid ${status==='done'?T.green:T.border}`,background:status==='done'?T.green:'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',marginTop:2}}>
+                    <button onClick={e=>{e.stopPropagation();toggle(o.id);}} style={{width:24,height:24,borderRadius:'50%',border:`2px solid ${status==='done'?T.green:T.border}`,background:status==='done'?T.green:'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',marginTop:2}}>
                       {status==='done'&&<Icon name="check" size={12} color="#000"/>}
                     </button>
                     <div style={{flex:1,minWidth:0}}>
@@ -298,10 +357,12 @@ const Objectives = ({data,setData,isMobile}) => {
                       <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
                         {area&&<Tag text={`${area.icon} ${area.name}`} color={area.color}/>}
                         {o.deadline&&<span style={{color:T.muted,fontSize:12}}>📅 {fmt(o.deadline)}</span>}
-                        <span style={{color:T.dim,fontSize:12}}>📁 {relProj.length} proyectos</span>
+                        <span style={{color:relProj.length?T.blue:T.dim,fontSize:12,fontWeight:relProj.length?600:400}}>
+                          📁 {relProj.length} proyecto{relProj.length!==1?'s':''} →
+                        </span>
                       </div>
                     </div>
-                    <button onClick={()=>del(o.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:6,display:'flex'}}><Icon name="trash" size={14}/></button>
+                    <button onClick={e=>{e.stopPropagation();del(o.id);}} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:6,display:'flex'}}><Icon name="trash" size={14}/></button>
                   </div>
                 </Card>
               );
@@ -309,12 +370,18 @@ const Objectives = ({data,setData,isMobile}) => {
           </div>
         );
       })}
-      {!data.objectives.length&&<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}><Icon name="target" size={40}/><p>Sin objetivos aún</p></div>}
+      {!allObj.length&&(
+        <div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
+          <Icon name="target" size={40}/>
+          <p style={{marginBottom:12}}>{filteredArea?`Sin objetivos en ${filteredArea.name}`:'Sin objetivos aún'}</p>
+          <Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Crear primer objetivo</Btn>
+        </div>
+      )}
       {modal&&(
         <Modal title="Nuevo objetivo" onClose={()=>setModal(false)}>
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="¿Qué quieres lograr?"/>
-            <Select value={form.areaId} onChange={v=>setForm(f=>({...f,areaId:v}))}>
+            <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="¿Qué quiere lograr?"/>
+            <Select value={form.areaId||areaFilter||''} onChange={v=>setForm(f=>({...f,areaId:v}))}>
               <option value="">Sin área</option>
               {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
             </Select>
@@ -335,17 +402,23 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
   const [taskModal,setTaskModal]=useState(false);
   const [projForm,setProjForm]=useState({title:'',objectiveId:'',areaId:'',status:'active'});
   const [taskForm,setTaskForm]=useState({title:'',priority:'media',dueDate:''});
+  const [objFilter,setObjFilter]=useState(null); // objectiveId filter
 
   const UNASSIGNED={id:'__unassigned__',title:'📥 Sin proyecto'};
   const unassignedTasks=data.tasks.filter(t=>!t.projectId);
 
-  // Smart nav: auto-select unassigned tasks when coming from dashboard
+  // Smart nav: handle hints
   useEffect(()=>{
     if(viewHint==='pending'){
-      if(unassignedTasks.length>0){
-        setSelProject(UNASSIGNED);
-        if(isMobile)setShowDetail(true);
-      }
+      if(unassignedTasks.length>0){setSelProject(UNASSIGNED);if(isMobile)setShowDetail(true);}
+      onConsumeHint?.();
+    } else if(typeof viewHint==='string'&&viewHint.startsWith('obj:')){
+      const oId=viewHint.slice(4);
+      setObjFilter(oId);
+      // pre-select first project of this objective if exists
+      const firstProj=data.projects.find(p=>p.objectiveId===oId);
+      if(firstProj){setSelProject(firstProj);if(isMobile)setShowDetail(true);}
+      else{setSelProject(null);setShowDetail(false);}
       onConsumeHint?.();
     }
   },[viewHint]);
@@ -406,13 +479,24 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
     </Modal>}
   </>;
 
-  const ProjectList=()=>(
+  const ProjectList=()=>{
+    const filteredObj=objFilter?data.objectives.find(o=>o.id===objFilter):null;
+    const visibleProjects=objFilter
+      ?data.projects.filter(p=>p.objectiveId===objFilter)
+      :data.projects;
+    return (
     <div>
-      {!isMobile&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+      {!isMobile&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
         <span style={{color:T.muted,fontSize:12,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>Proyectos</span>
         <button onClick={()=>setProjModal(true)} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',display:'flex'}}><Icon name="plus" size={16}/></button>
       </div>}
-      {data.projects.map(p=>{
+      {filteredObj&&(
+        <div style={{marginBottom:12,padding:'8px 12px',background:`${T.accent}12`,border:`1px solid ${T.accent}30`,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+          <span style={{color:T.accent,fontSize:12,fontWeight:600}}>🎯 {filteredObj.title}</span>
+          <button onClick={()=>setObjFilter(null)} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit',padding:0}}>✕ Todos</button>
+        </div>
+      )}
+      {visibleProjects.map(p=>{
         const tasks=data.tasks.filter(t=>t.projectId===p.id);
         const done=tasks.filter(t=>t.status==='done').length;
         const pct=tasks.length?Math.round(done/tasks.length*100):0;
@@ -427,14 +511,22 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
           </div>
         );
       })}
-      {unassignedTasks.length>0&&(
+      {!objFilter&&unassignedTasks.length>0&&(
         <div onClick={()=>openProject(UNASSIGNED)}
           style={{padding:'12px 14px',borderRadius:10,cursor:'pointer',marginBottom:8,background:selProject?.id==='__unassigned__'&&!isMobile?T.surface2:T.surface,border:`1px solid ${selProject?.id==='__unassigned__'&&!isMobile?T.accent:T.border}`,transition:'border-color 0.15s',borderStyle:'dashed'}}>
           <div style={{color:T.muted,fontSize:14,fontWeight:500,marginBottom:4}}>📥 Sin proyecto</div>
           <div style={{color:T.dim,fontSize:11}}>{unassignedTasks.filter(t=>t.status!=='done').length} pendientes</div>
         </div>
       )}
-      {!data.projects.length&&!unassignedTasks.length&&<div style={{textAlign:'center',padding:'30px 0',color:T.dim}}><Icon name="folder" size={36}/><p>Sin proyectos</p></div>}
+      {!visibleProjects.length&&!(unassignedTasks.length&&!objFilter)&&(
+        <div style={{textAlign:'center',padding:'30px 0',color:T.dim}}>
+          <Icon name="folder" size={36}/>
+          <p style={{marginBottom:12}}>{filteredObj?`Sin proyectos para este objetivo`:'Sin proyectos'}</p>
+          <Btn size="sm" onClick={()=>setProjModal(true)}><Icon name="plus" size={12}/>Crear proyecto</Btn>
+        </div>
+      )}
+    </div>
+  );}
     </div>
   );
 
@@ -494,12 +586,20 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
 };
 
 // ===================== NOTES =====================
-const Notes = ({data,setData,isMobile}) => {
+const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
   const [sel,setSel]=useState(null);
   const [showNote,setShowNote]=useState(false);
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({title:'',content:'',tags:'',areaId:''});
   const [search,setSearch]=useState('');
+
+  useEffect(()=>{
+    if(viewHint&&viewHint!=='null'){
+      const found=data.notes.find(n=>n.id===viewHint);
+      if(found){setSel(found);if(isMobile)setShowNote(true);}
+      onConsumeHint?.();
+    }
+  },[viewHint]);
 
   const saveNote=()=>{
     if(!form.title.trim())return;
@@ -639,6 +739,7 @@ const HabitTracker = ({data,setData,isMobile}) => {
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({name:'',frequency:'daily'});
   const numDays=isMobile?5:7;
+  const nameColW=isMobile?'130px':'160px';
   const days=Array.from({length:numDays},(_,i)=>{
     const d=new Date();d.setDate(d.getDate()-(numDays-1)+i);
     return {date:d.toISOString().split('T')[0],label:d.toLocaleDateString('es-ES',{weekday:'short'}),day:d.getDate()};
@@ -664,7 +765,7 @@ const HabitTracker = ({data,setData,isMobile}) => {
       <PageHeader title="Habit Tracker" subtitle="Construye rachas diarias 🔥" isMobile={isMobile}
         action={<Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Nuevo</Btn>}/>
       <div style={{background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,overflow:'hidden'}}>
-        <div style={{display:'grid',gridTemplateColumns:`1fr repeat(${numDays},44px)`,borderBottom:`1px solid ${T.border}`}}>
+        <div style={{display:'grid',gridTemplateColumns:`${nameColW} repeat(${numDays},1fr)`,borderBottom:`1px solid ${T.border}`}}>
           <div style={{padding:'10px 14px',color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>Hábito</div>
           {days.map(d=>(
             <div key={d.date} style={{padding:'8px 4px',textAlign:'center',borderLeft:`1px solid ${T.border}`}}>
@@ -676,20 +777,20 @@ const HabitTracker = ({data,setData,isMobile}) => {
         {data.habits.map(h=>{
           const streak=(()=>{let s=0,d=new Date();while(h.completions.includes(d.toISOString().split('T')[0])){s++;d.setDate(d.getDate()-1);}return s;})();
           return (
-            <div key={h.id} style={{display:'grid',gridTemplateColumns:`1fr repeat(${numDays},44px)`,borderBottom:`1px solid ${T.border}`}}>
-              <div style={{padding:'12px 14px',display:'flex',alignItems:'center',gap:8}}>
+            <div key={h.id} style={{display:'grid',gridTemplateColumns:`${nameColW} repeat(${numDays},1fr)`,borderBottom:`1px solid ${T.border}`}}>
+              <div style={{padding:'12px 10px 12px 14px',display:'flex',alignItems:'center',gap:6}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:T.text,fontSize:13,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{h.name}</div>
-                  {streak>0&&<div style={{color:T.accent,fontSize:11}}>🔥 {streak}d</div>}
+                  <div style={{color:T.text,fontSize:12,fontWeight:500,lineHeight:1.3,wordBreak:'break-word'}}>{h.name}</div>
+                  {streak>0&&<div style={{color:T.accent,fontSize:10,marginTop:2}}>🔥 {streak}d</div>}
                 </div>
-                <button onClick={()=>del(h.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex',flexShrink:0}}><Icon name="trash" size={13}/></button>
+                <button onClick={()=>del(h.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2,display:'flex',flexShrink:0}}><Icon name="trash" size={12}/></button>
               </div>
               {days.map(d=>{
                 const done=h.completions.includes(d.date);
                 return (
                   <div key={d.date} style={{display:'flex',alignItems:'center',justifyContent:'center',borderLeft:`1px solid ${T.border}`}}>
-                    <button onClick={()=>toggle(h.id,d.date)} style={{width:30,height:30,borderRadius:8,border:`2px solid ${done?T.green:T.border}`,background:done?T.green:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}>
-                      {done&&<Icon name="check" size={13} color="#000"/>}
+                    <button onClick={()=>toggle(h.id,d.date)} style={{width:28,height:28,borderRadius:7,border:`2px solid ${done?T.green:T.border}`,background:done?T.green:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}>
+                      {done&&<Icon name="check" size={12} color="#000"/>}
                     </button>
                   </div>
                 );
@@ -825,8 +926,8 @@ HOY: ${t}
 - Directa y sin relleno. Vas al punto.
 - Empática cuando el momento lo amerita — si alguien está overwhelmed o stressed, lo notas y bajas el tono.
 - Tienes humor seco, subtle. No forzado.
-- Hablas mainly en español pero se te sale el spanglish naturalmente — "eso está heavy", "that's the move", "no mames qué buen plan".
-- Tuteas siempre. Nunca de usted.
+- Hablas principalmente en español. Puedes usar algún anglicismo natural — "eso está heavy", "that's the move".
+- SIEMPRE tratas de USTED. Nunca tutees. Di "usted", "su", "le", nunca "tú" ni "tu".
 - NUNCA digas "como asistente de IA" ni nada corporate. Eres Psicke, punto.
 
 ═══ LO QUE PUEDES HACER ═══
@@ -867,15 +968,15 @@ Inbox: \`\`\`json
 Cuando el usuario pida algo grande como "quiero bajar de peso", "pon en mis objetivos...", "planéame...", "quiero lograr...", "ayúdame a organizar...":
 
 PASO 1 — INDAGA (no generes JSON todavía):
-Hazle 1-2 preguntas clave para armar un buen plan:
+Hazle 1-2 preguntas clave para armar un buen plan (en usted):
 - ¿Cuál es la meta concreta? (número, fecha, resultado)
 - ¿Cómo piensa lograrlo? (recursos, estrategia, restricciones)
 - ¿Qué área de su vida toca? (si no es obvio)
-Sé conversacional, no hagas un interrogatorio. Una o dos preguntas por mensaje max.
+Sea conversacional, no haga un interrogatorio. Una o dos preguntas por mensaje máx.
 
 PASO 2 — CONFIRMA:
-Cuando tengas suficiente info, presenta un resumen breve del plan y pregunta si le late. Ejemplo:
-"Ok, te armo esto: Objetivo 'Bajar 5kg' para mayo, con un proyecto de plan alimenticio y ejercicio, tareas semanales concretas y hábitos diarios. ¿Le damos?"
+Cuando tenga suficiente info, presente un resumen breve del plan y pregunte si le parece bien. Ejemplo:
+"Ok, le armo esto: Objetivo 'Bajar 5kg' para mayo, con un proyecto de plan alimenticio y ejercicio, tareas semanales concretas y hábitos diarios. ¿Le damos?"
 
 PASO 3 — GENERA (solo cuando el usuario confirme):
 \`\`\`json
@@ -912,7 +1013,8 @@ REGLAS DE PLANIFICACIÓN:
 - NUNCA inventes datos que el usuario no dijo.
 - Respuestas cortas: máx 3 párrafos (excepto cuando presentas un plan).
 - Si el usuario está bloqueado, hazle UNA pregunta que lo desbloquee.
-- No repitas lo que el usuario acaba de decir.`;
+- No repitas lo que el usuario acaba de decir.
+- RECUERDA: siempre de usted. "¿Le parece?", "Su objetivo", "Le ayudo", nunca "te parece", "tu objetivo", "te ayudo".`;
 };
 
 const parsePsickeAction=(text)=>{
@@ -927,8 +1029,9 @@ const parsePsickeAction=(text)=>{
 const stripPsickeJson=(text)=>text.replace(/\`\`\`json[\s\S]*?\`\`\`/g,'').trim();
 
 const Psicke=({apiKey,onGoSettings,data,setData})=>{
+  const INIT_MSG={role:'assistant',content:'Aquí Psicke. ¿En qué está pensando?'};
   const [open,setOpen]=useState(false);
-  const [msgs,setMsgs]=useState([{role:'assistant',content:'Aquí Psicke. ¿En qué estás pensando?'}]);
+  const [msgs,setMsgs]=useState([INIT_MSG]);
   const [input,setInput]=useState('');
   const [loading,setLoading]=useState(false);
   const [recording,setRecording]=useState(false);
@@ -936,6 +1039,18 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
   const bottomRef=useRef(null);
   const recRef=useRef(null);
   const inputRef=useRef(null);
+
+  // Persist and restore conversation
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const r=await window.storage?.get('psicke_msgs');
+        if(r){const saved=JSON.parse(r.value);if(saved?.length)setMsgs(saved);}
+      }catch(e){}
+    })();
+  },[]);
+  const saveMsgs=(m)=>{setMsgs(m);try{window.storage?.set('psicke_msgs',JSON.stringify(m));}catch(e){}};
+  const clearMsgs=()=>{saveMsgs([INIT_MSG]);};
 
   useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:'smooth'});},[msgs,open]);
   useEffect(()=>{if(open)setTimeout(()=>inputRef.current?.focus(),300);},[open]);
@@ -954,13 +1069,13 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
     if(!key){setOpen(false);onGoSettings();return;}
     const userMsg={role:'user',content:text};
     const next=[...msgs,userMsg];
-    setMsgs(next);setInput('');setLoading(true);
+    saveMsgs(next);setInput('');setLoading(true);
     try{
       const sysPrompt=buildPsickePrompt(data);
       const body={
         contents:[
           {role:'user',parts:[{text:`[SISTEMA]\n${sysPrompt}\n\n[Confirma tu rol brevemente]`}]},
-          {role:'model',parts:[{text:'Aquí Psicke. ¿En qué estás pensando?'}]},
+          {role:'model',parts:[{text:'Aquí Psicke. ¿En qué está pensando?'}]},
           ...next.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
         ],
         generationConfig:{temperature:0.8,maxOutputTokens:1200},
@@ -1035,12 +1150,12 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
       }
 
       const finalContent=display+(savedLabel?`\n\n✅ ${savedLabel}`:'');
-      setMsgs(p=>[...p,{role:'assistant',content:finalContent}]);
+      saveMsgs([...next,{role:'assistant',content:finalContent}]);
     }catch(e){
       const msg=e.message==='Failed to fetch'
-        ?'No se pudo conectar. Verifica tu conexión o que la API key sea válida.'
+        ?'No se pudo conectar. Verifica su conexión o que la API key sea válida.'
         :e.message;
-      setMsgs(p=>[...p,{role:'assistant',content:`⚠️ ${msg}`}]);
+      saveMsgs([...next,{role:'assistant',content:`⚠️ ${msg}`}]);
     }
     setLoading(false);
   };
@@ -1092,7 +1207,7 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
                   </div>
                 </div>
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  <button onClick={()=>setMsgs([{role:'assistant',content:'Aquí Psicke. ¿En qué estás pensando?'}])}
+                  <button onClick={clearMsgs}
                     style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'4px 10px',cursor:'pointer',color:T.dim,fontSize:11,fontFamily:'inherit'}}>
                     Borrar
                   </button>
@@ -1237,10 +1352,10 @@ export default function App() {
   const props={data,setData,isMobile};
   const views={
     dashboard:<Dashboard {...props} onNavigate={navigate}/>,
-    areas:<Areas {...props}/>,
-    objectives:<Objectives {...props}/>,
+    areas:<Areas {...props} onNavigate={navigate}/>,
+    objectives:<Objectives {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
     projects:<ProjectsAndTasks {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
-    notes:<Notes {...props}/>,
+    notes:<Notes {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
     inbox:<Inbox {...props}/>,
     habits:<HabitTracker {...props}/>,
     settings:<Settings apiKey={apiKey} setApiKey={setApiKey} isMobile={isMobile}/>,
