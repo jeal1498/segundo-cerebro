@@ -783,26 +783,89 @@ const Settings = ({apiKey,setApiKey,isMobile}) => {
 };
 
 // ===================== PSICKE — FLOATING BRAIN =====================
-const PSICKE_PROMPT=`Eres Psicke — una IA flotante, omnipresente y directa que vive dentro del Segundo Cerebro del usuario.
+const buildPsickePrompt=(data)=>{
+  const t=new Date().toISOString().split('T')[0];
+  const notesSummary=data.notes.slice(0,10).map(n=>`• ${n.title}`).join('\n');
+  const tasksPending=data.tasks.filter(t=>t.status==='todo');
+  const tasksSummary=tasksPending.slice(0,10).map(t=>`• ${t.title}${t.deadline?' ('+t.deadline+')':''}`).join('\n');
+  const inboxPending=data.inbox.filter(i=>!i.processed);
+  const habitNames=data.habits.map(h=>h.name).join(', ');
+  const areaNames=data.areas.map(a=>`${a.icon} ${a.name}`).join(', ');
+  const objectives=data.objectives.filter(o=>o.status==='active').map(o=>`• ${o.title}`).join('\n');
 
-Tu personalidad:
-- Concisa y contundente. Sin rodeos, sin relleno.
-- Sarcástica con gracia cuando el usuario es vago, redundante o dramático.
-- Empática cuando el momento lo requiere, pero nunca empalagosa.
-- Hablas en español, tuteas siempre.
+  return `Eres Psicke — la IA que vive dentro del Segundo Cerebro del usuario. No eres un chatbot genérico; eres SU extensión mental.
 
-Tu función principal:
-1. Responder preguntas del usuario sobre su vida, sus datos, sus ideas.
-2. Ayudarle a pensar, decidir o aclarar algo rápido.
-3. Si el usuario menciona algo que debería guardarse (gasto, evento, idea, tarea), sugiérelo brevemente.
+HOY: ${t}
 
-Reglas:
-- Respuestas cortas (máx 3 párrafos o equivalente).
-- NO generes JSON ni intentes guardar nada — solo conversa.
-- Si el usuario está bloqueado, hazle UNA pregunta poderosa que le desbloquee.
-- Responde siempre en español.`;
+═══ TU PERSONALIDAD ═══
+- Directa y sin relleno. Vas al punto.
+- Empática cuando el momento lo amerita — si alguien está overwhelmed o stressed, lo notas y bajas el tono.
+- Tienes humor seco, subtle. No forzado.
+- Hablas mainly en español pero se te sale el spanglish naturalmente — "eso está heavy", "that's the move", "no mames qué buen plan".
+- Tuteas siempre. Nunca de usted.
+- NUNCA digas "como asistente de IA" ni nada corporate. Eres Psicke, punto.
 
-const Psicke=({apiKey,onGoSettings})=>{
+═══ LO QUE PUEDES HACER ═══
+1. CONVERSAR — El usuario piensa en voz alta contigo. Le ayudas a ordenar ideas, tomar decisiones, o simplemente a procesar algo.
+2. RESUMIR — Si pregunta por sus datos, le das un resumen claro de sus notas, tareas, hábitos, objetivos.
+3. GUARDAR — Cuando el usuario quiera recordar algo, guardar un pendiente, una idea, o una nota, TÚ LO GUARDAS.
+
+═══ DATOS ACTUALES DEL USUARIO ═══
+Áreas: ${areaNames || 'Ninguna'}
+Objetivos activos:
+${objectives || '(sin objetivos)'}
+Tareas pendientes (${tasksPending.length}):
+${tasksSummary || '(sin tareas)'}
+Notas recientes:
+${notesSummary || '(sin notas)'}
+Inbox sin procesar: ${inboxPending.length} items
+Hábitos: ${habitNames || '(sin hábitos)'}
+
+═══ PROTOCOLO DE GUARDADO ═══
+Cuando el usuario diga algo como "guárdame esto", "anota que...", "tengo un pendiente", "recuérdame que...", "nueva tarea:", etc.:
+1. Confirma brevemente con tu estilo.
+2. INMEDIATAMENTE después genera el JSON así:
+
+Para tareas/pendientes:
+\`\`\`json
+{"action":"SAVE_TASK","data":{"title":"título conciso"}}
+\`\`\`
+
+Para notas/ideas/info:
+\`\`\`json
+{"action":"SAVE_NOTE","data":{"title":"título conciso","content":"detalle completo","tags":["tag1","tag2"]}}
+\`\`\`
+
+Para captura rápida al inbox:
+\`\`\`json
+{"action":"SAVE_INBOX","data":{"content":"lo que sea"}}
+\`\`\`
+
+REGLAS DEL JSON:
+- Solo UNA acción por mensaje.
+- El JSON va DESPUÉS de tu respuesta conversacional.
+- Si no tienes suficiente info, pregunta antes de generar JSON.
+- NUNCA inventes datos que el usuario no dijo.
+
+═══ REGLAS GENERALES ═══
+- Respuestas cortas: máx 3 párrafos.
+- Si el usuario está bloqueado, hazle UNA pregunta que lo desbloquee.
+- Si pide un resumen, dalo organizado pero breve.
+- No repitas lo que el usuario acaba de decir.`;
+};
+
+const parsePsickeAction=(text)=>{
+  const m=text.match(/\`\`\`json\s*([\s\S]*?)\s*\`\`\`/);
+  if(!m)return null;
+  try{
+    const p=JSON.parse(m[1]);
+    if(p.action&&p.data)return p;
+  }catch(e){}
+  return null;
+};
+const stripPsickeJson=(text)=>text.replace(/\`\`\`json[\s\S]*?\`\`\`/g,'').trim();
+
+const Psicke=({apiKey,onGoSettings,data,setData})=>{
   const [open,setOpen]=useState(false);
   const [msgs,setMsgs]=useState([{role:'assistant',content:'Aquí Psicke. ¿En qué estás pensando?'}]);
   const [input,setInput]=useState('');
@@ -832,13 +895,14 @@ const Psicke=({apiKey,onGoSettings})=>{
     const next=[...msgs,userMsg];
     setMsgs(next);setInput('');setLoading(true);
     try{
+      const sysPrompt=buildPsickePrompt(data);
       const body={
         contents:[
-          {role:'user',parts:[{text:'Eres Psicke, IA personal. Directa, concisa, sarcástica con gracia. Español siempre. Respuestas cortas (máx 3 párrafos). No generes JSON.'}]},
-          {role:'model',parts:[{text:'Entendido. Soy Psicke. ¿En qué estás pensando?'}]},
+          {role:'user',parts:[{text:`[SISTEMA]\n${sysPrompt}\n\n[Confirma tu rol brevemente]`}]},
+          {role:'model',parts:[{text:'Aquí Psicke. ¿En qué estás pensando?'}]},
           ...next.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
         ],
-        generationConfig:{temperature:0.85,maxOutputTokens:512},
+        generationConfig:{temperature:0.8,maxOutputTokens:600},
       };
       const res=await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
@@ -852,8 +916,35 @@ const Psicke=({apiKey,onGoSettings})=>{
         throw new Error(emsg);
       }
       const d=await res.json();
-      const reply=d.candidates?.[0]?.content?.parts?.[0]?.text||'Sin respuesta.';
-      setMsgs(p=>[...p,{role:'assistant',content:reply}]);
+      const raw=d.candidates?.[0]?.content?.parts?.[0]?.text||'Sin respuesta.';
+
+      // Parse and execute save action if present
+      const action=parsePsickeAction(raw);
+      const display=stripPsickeJson(raw);
+      let savedLabel=null;
+
+      if(action&&setData){
+        const td=new Date().toISOString().split('T')[0];
+        if(action.action==='SAVE_TASK'&&action.data.title){
+          const t={id:uid(),title:action.data.title,projectId:'',status:'todo',deadline:action.data.deadline||''};
+          const upd=[t,...data.tasks];
+          setData(d=>({...d,tasks:upd}));save('tasks',upd);
+          savedLabel='📋 Tarea guardada';
+        }else if(action.action==='SAVE_NOTE'&&action.data.title){
+          const n={id:uid(),title:action.data.title,content:action.data.content||'',tags:action.data.tags||[],areaId:'',createdAt:td};
+          const upd=[n,...data.notes];
+          setData(d=>({...d,notes:upd}));save('notes',upd);
+          savedLabel='📝 Nota guardada';
+        }else if(action.action==='SAVE_INBOX'&&action.data.content){
+          const i={id:uid(),content:action.data.content,createdAt:td,processed:false};
+          const upd=[i,...data.inbox];
+          setData(d=>({...d,inbox:upd}));save('inbox',upd);
+          savedLabel='📥 Agregado al inbox';
+        }
+      }
+
+      const finalContent=display+(savedLabel?`\n\n✅ ${savedLabel}`:'');
+      setMsgs(p=>[...p,{role:'assistant',content:finalContent}]);
     }catch(e){
       const msg=e.message==='Failed to fetch'
         ?'No se pudo conectar. Verifica tu conexión o que la API key sea válida.'
@@ -1176,7 +1267,7 @@ export default function App() {
       )}
 
       {/* PSICKE — FLOATING BUBBLE */}
-      <Psicke apiKey={apiKey} onGoSettings={()=>setView('settings')}/>
+      <Psicke apiKey={apiKey} onGoSettings={()=>setView('settings')} data={data} setData={setData}/>
 
     </div>
   );
