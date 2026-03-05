@@ -150,17 +150,17 @@ const PageHeader = ({title,subtitle,action,isMobile}) => (
 );
 
 // ===================== DASHBOARD =====================
-const Dashboard = ({data,isMobile}) => {
+const Dashboard = ({data,isMobile,onNavigate}) => {
   const pendingTasks=data.tasks.filter(t=>t.status!=='done').length;
   const inboxUnread=data.inbox.filter(i=>!i.processed).length;
   const todayHabits=data.habits.filter(h=>h.completions.includes(today())).length;
   const stats=[
-    {label:'Áreas',val:data.areas.length,icon:'grid',color:T.blue},
-    {label:'Objetivos',val:data.objectives.filter(o=>o.status==='active').length,icon:'target',color:T.accent},
-    {label:'Tareas',val:pendingTasks,icon:'check',color:T.orange},
-    {label:'Inbox',val:inboxUnread,icon:'inbox',color:T.red},
-    {label:'Hábitos hoy',val:`${todayHabits}/${data.habits.length}`,icon:'habit',color:T.green},
-    {label:'Notas',val:data.notes.length,icon:'note',color:T.purple},
+    {label:'Áreas',val:data.areas.length,icon:'grid',color:T.blue,view:'areas',hint:null},
+    {label:'Objetivos',val:data.objectives.filter(o=>o.status==='active').length,icon:'target',color:T.accent,view:'objectives',hint:'active'},
+    {label:'Tareas',val:pendingTasks,icon:'check',color:T.orange,view:'projects',hint:'pending'},
+    {label:'Inbox',val:inboxUnread,icon:'inbox',color:T.red,view:'inbox',hint:'unread'},
+    {label:'Hábitos hoy',val:`${todayHabits}/${data.habits.length}`,icon:'habit',color:T.green,view:'habits',hint:'today'},
+    {label:'Notas',val:data.notes.length,icon:'note',color:T.purple,view:'notes',hint:null},
   ];
   const recentNotes=[...data.notes].sort((a,b)=>b.createdAt>a.createdAt?1:-1).slice(0,3);
   const pendingList=data.tasks.filter(t=>t.status!=='done').slice(0,5);
@@ -170,7 +170,7 @@ const Dashboard = ({data,isMobile}) => {
       <p style={{color:T.muted,marginBottom:20,fontSize:13}}>{new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}</p>
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:20}}>
         {stats.map(s=>(
-          <Card key={s.label} style={{textAlign:'center',padding:isMobile?12:16}}>
+          <Card key={s.label} onClick={onNavigate?()=>onNavigate(s.view,s.hint):undefined} style={{textAlign:'center',padding:isMobile?12:16}}>
             <div style={{marginBottom:6,color:s.color}}><Icon name={s.icon} size={isMobile?18:22} color={s.color}/></div>
             <div style={{fontSize:isMobile?22:28,fontWeight:700,color:T.text}}>{s.val}</div>
             <div style={{fontSize:11,color:T.muted,marginTop:2}}>{s.label}</div>
@@ -328,7 +328,7 @@ const Objectives = ({data,setData,isMobile}) => {
 };
 
 // ===================== PROJECTS & TASKS =====================
-const ProjectsAndTasks = ({data,setData,isMobile}) => {
+const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
   const [selProject,setSelProject]=useState(null);
   const [showDetail,setShowDetail]=useState(false);
   const [projModal,setProjModal]=useState(false);
@@ -336,15 +336,31 @@ const ProjectsAndTasks = ({data,setData,isMobile}) => {
   const [projForm,setProjForm]=useState({title:'',objectiveId:'',areaId:'',status:'active'});
   const [taskForm,setTaskForm]=useState({title:'',priority:'media',dueDate:''});
 
+  const UNASSIGNED={id:'__unassigned__',title:'📥 Sin proyecto'};
+  const unassignedTasks=data.tasks.filter(t=>!t.projectId);
+
+  // Smart nav: auto-select unassigned tasks when coming from dashboard
+  useEffect(()=>{
+    if(viewHint==='pending'){
+      if(unassignedTasks.length>0){
+        setSelProject(UNASSIGNED);
+        if(isMobile)setShowDetail(true);
+      }
+      onConsumeHint?.();
+    }
+  },[viewHint]);
+
   const saveProj=()=>{
     if(!projForm.title.trim())return;
     const updated=[...data.projects,{id:uid(),...projForm}];
     setData(d=>({...d,projects:updated}));save('projects',updated);
     setProjModal(false);setProjForm({title:'',objectiveId:'',areaId:'',status:'active'});
   };
+
   const saveTask=()=>{
     if(!taskForm.title.trim()||!selProject)return;
-    const updated=[...data.tasks,{id:uid(),projectId:selProject.id,status:'todo',...taskForm}];
+    const pid=selProject.id==='__unassigned__'?'':selProject.id;
+    const updated=[...data.tasks,{id:uid(),projectId:pid,status:'todo',...taskForm}];
     setData(d=>({...d,tasks:updated}));save('tasks',updated);
     setTaskModal(false);setTaskForm({title:'',priority:'media',dueDate:''});
   };
@@ -357,7 +373,8 @@ const ProjectsAndTasks = ({data,setData,isMobile}) => {
     if(selProject?.id===id){setSelProject(null);setShowDetail(false);}
   };
   const openProject=(p)=>{setSelProject(p);if(isMobile)setShowDetail(true);};
-  const pTasks=selProject?data.tasks.filter(t=>t.projectId===selProject.id):[];
+  const isUnassigned=selProject?.id==='__unassigned__';
+  const pTasks=selProject?(isUnassigned?unassignedTasks:data.tasks.filter(t=>t.projectId===selProject.id)):[];
   const pColors={alta:T.red,media:T.accent,baja:T.green};
 
   const ProjModals=()=><>
@@ -410,7 +427,14 @@ const ProjectsAndTasks = ({data,setData,isMobile}) => {
           </div>
         );
       })}
-      {!data.projects.length&&<div style={{textAlign:'center',padding:'30px 0',color:T.dim}}><Icon name="folder" size={36}/><p>Sin proyectos</p></div>}
+      {unassignedTasks.length>0&&(
+        <div onClick={()=>openProject(UNASSIGNED)}
+          style={{padding:'12px 14px',borderRadius:10,cursor:'pointer',marginBottom:8,background:selProject?.id==='__unassigned__'&&!isMobile?T.surface2:T.surface,border:`1px solid ${selProject?.id==='__unassigned__'&&!isMobile?T.accent:T.border}`,transition:'border-color 0.15s',borderStyle:'dashed'}}>
+          <div style={{color:T.muted,fontSize:14,fontWeight:500,marginBottom:4}}>📥 Sin proyecto</div>
+          <div style={{color:T.dim,fontSize:11}}>{unassignedTasks.filter(t=>t.status!=='done').length} pendientes</div>
+        </div>
+      )}
+      {!data.projects.length&&!unassignedTasks.length&&<div style={{textAlign:'center',padding:'30px 0',color:T.dim}}><Icon name="folder" size={36}/><p>Sin proyectos</p></div>}
     </div>
   );
 
@@ -423,7 +447,7 @@ const ProjectsAndTasks = ({data,setData,isMobile}) => {
         <h3 style={{margin:0,color:T.text,fontSize:isMobile?18:16,fontWeight:700}}>{selProject?.title}</h3>
         <div style={{display:'flex',gap:8}}>
           <Btn size="sm" onClick={()=>setTaskModal(true)}><Icon name="plus" size={12}/>Tarea</Btn>
-          <Btn size="sm" variant="danger" onClick={()=>delProj(selProject.id)}><Icon name="trash" size={12}/></Btn>
+          {!isUnassigned&&<Btn size="sm" variant="danger" onClick={()=>delProj(selProject.id)}><Icon name="trash" size={12}/></Btn>}
         </div>
       </div>
       {['todo','done'].map(st=>{
@@ -808,10 +832,11 @@ HOY: ${t}
 ═══ LO QUE PUEDES HACER ═══
 1. CONVERSAR — El usuario piensa en voz alta contigo. Le ayudas a ordenar ideas, tomar decisiones, o simplemente a procesar algo.
 2. RESUMIR — Si pregunta por sus datos, le das un resumen claro de sus notas, tareas, hábitos, objetivos.
-3. GUARDAR — Cuando el usuario quiera recordar algo, guardar un pendiente, una idea, o una nota, TÚ LO GUARDAS.
+3. GUARDAR — Items individuales: tareas, notas, capturas al inbox.
+4. PLANIFICAR — Crear planes completos con objetivo + proyecto + tareas + hábitos, todo conectado.
 
 ═══ DATOS ACTUALES DEL USUARIO ═══
-Áreas: ${areaNames || 'Ninguna'}
+Áreas disponibles: ${areaNames || 'Ninguna'}
 Objetivos activos:
 ${objectives || '(sin objetivos)'}
 Tareas pendientes (${tasksPending.length}):
@@ -821,36 +846,72 @@ ${notesSummary || '(sin notas)'}
 Inbox sin procesar: ${inboxPending.length} items
 Hábitos: ${habitNames || '(sin hábitos)'}
 
-═══ PROTOCOLO DE GUARDADO ═══
-Cuando el usuario diga algo como "guárdame esto", "anota que...", "tengo un pendiente", "recuérdame que...", "nueva tarea:", etc.:
-1. Confirma brevemente con tu estilo.
-2. INMEDIATAMENTE después genera el JSON así:
+═══ PROTOCOLO DE GUARDADO INDIVIDUAL ═══
+Para items sueltos ("guárdame esto", "anota que...", "tengo un pendiente"):
+1. Confirma brevemente.
+2. Genera el JSON:
 
-Para tareas/pendientes:
-\`\`\`json
+Tarea: \`\`\`json
 {"action":"SAVE_TASK","data":{"title":"título conciso"}}
 \`\`\`
 
-Para notas/ideas/info:
-\`\`\`json
-{"action":"SAVE_NOTE","data":{"title":"título conciso","content":"detalle completo","tags":["tag1","tag2"]}}
+Nota: \`\`\`json
+{"action":"SAVE_NOTE","data":{"title":"título","content":"detalle","tags":["tag1"]}}
 \`\`\`
 
-Para captura rápida al inbox:
-\`\`\`json
-{"action":"SAVE_INBOX","data":{"content":"lo que sea"}}
+Inbox: \`\`\`json
+{"action":"SAVE_INBOX","data":{"content":"captura rápida"}}
 \`\`\`
 
-REGLAS DEL JSON:
-- Solo UNA acción por mensaje.
+═══ PROTOCOLO DE PLANIFICACIÓN ═══
+Cuando el usuario pida algo grande como "quiero bajar de peso", "pon en mis objetivos...", "planéame...", "quiero lograr...", "ayúdame a organizar...":
+
+PASO 1 — INDAGA (no generes JSON todavía):
+Hazle 1-2 preguntas clave para armar un buen plan:
+- ¿Cuál es la meta concreta? (número, fecha, resultado)
+- ¿Cómo piensa lograrlo? (recursos, estrategia, restricciones)
+- ¿Qué área de su vida toca? (si no es obvio)
+Sé conversacional, no hagas un interrogatorio. Una o dos preguntas por mensaje max.
+
+PASO 2 — CONFIRMA:
+Cuando tengas suficiente info, presenta un resumen breve del plan y pregunta si le late. Ejemplo:
+"Ok, te armo esto: Objetivo 'Bajar 5kg' para mayo, con un proyecto de plan alimenticio y ejercicio, tareas semanales concretas y hábitos diarios. ¿Le damos?"
+
+PASO 3 — GENERA (solo cuando el usuario confirme):
+\`\`\`json
+{"action":"SAVE_PLAN","data":{
+  "area":"Salud",
+  "objective":{"title":"Bajar 5kg","deadline":"2026-05-04"},
+  "project":{"title":"Plan fitness y alimentación"},
+  "tasks":[
+    {"title":"Investigar dieta balanceada","priority":"alta"},
+    {"title":"Armar menú semanal","priority":"alta"},
+    {"title":"Inscribirme al gym","priority":"media"},
+    {"title":"Comprar báscula","priority":"baja"}
+  ],
+  "habits":[
+    {"name":"Ejercicio 30 min","frequency":"daily"},
+    {"name":"Tomar 2L de agua","frequency":"daily"},
+    {"name":"Pesarme","frequency":"weekly"}
+  ]
+}}
+\`\`\`
+
+REGLAS DE PLANIFICACIÓN:
+- "area" debe coincidir con un área existente del usuario: ${areaNames || '(sin áreas)'}. Si ninguna aplica, usa "".
+- Las tareas deben ser ACCIONABLES y CONCRETAS — no genéricas.
+- Los hábitos son acciones RECURRENTES que soporten el objetivo.
+- El deadline del objetivo debe ser una fecha realista basada en lo que dijo el usuario.
+- Genera entre 3-8 tareas y 1-4 hábitos según la complejidad.
+- NUNCA generes el plan sin que el usuario haya confirmado primero.
+
+═══ REGLAS GENERALES ═══
+- Solo UNA acción JSON por mensaje (SAVE_TASK, SAVE_NOTE, SAVE_INBOX, o SAVE_PLAN).
 - El JSON va DESPUÉS de tu respuesta conversacional.
 - Si no tienes suficiente info, pregunta antes de generar JSON.
 - NUNCA inventes datos que el usuario no dijo.
-
-═══ REGLAS GENERALES ═══
-- Respuestas cortas: máx 3 párrafos.
+- Respuestas cortas: máx 3 párrafos (excepto cuando presentas un plan).
 - Si el usuario está bloqueado, hazle UNA pregunta que lo desbloquee.
-- Si pide un resumen, dalo organizado pero breve.
 - No repitas lo que el usuario acaba de decir.`;
 };
 
@@ -902,7 +963,7 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
           {role:'model',parts:[{text:'Aquí Psicke. ¿En qué estás pensando?'}]},
           ...next.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
         ],
-        generationConfig:{temperature:0.8,maxOutputTokens:600},
+        generationConfig:{temperature:0.8,maxOutputTokens:1200},
       };
       const res=await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
@@ -925,7 +986,37 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
 
       if(action&&setData){
         const td=new Date().toISOString().split('T')[0];
-        if(action.action==='SAVE_TASK'&&action.data.title){
+        if(action.action==='SAVE_PLAN'&&action.data.objective){
+          // Create full connected plan: area match → objective → project → tasks + habits
+          const plan=action.data;
+          const matchedArea=data.areas.find(a=>a.name.toLowerCase()===plan.area?.toLowerCase());
+          const areaId=matchedArea?.id||'';
+
+          const objId=uid();
+          const newObj={id:objId,title:plan.objective.title,areaId,deadline:plan.objective.deadline||'',status:'active'};
+
+          const projId=uid();
+          const newProj={id:projId,title:plan.project?.title||plan.objective.title,objectiveId:objId,areaId,status:'active'};
+
+          const newTasks=(plan.tasks||[]).map(t=>({id:uid(),title:t.title,projectId:projId,status:'todo',priority:t.priority||'media',dueDate:t.dueDate||''}));
+
+          const newHabits=(plan.habits||[]).map(h=>({id:uid(),name:h.name,frequency:h.frequency||'daily',completions:[]}));
+
+          const updObj=[newObj,...data.objectives];
+          const updProj=[newProj,...data.projects];
+          const updTasks=[...newTasks,...data.tasks];
+          const updHabits=[...newHabits,...data.habits];
+
+          setData(d=>({...d,objectives:updObj,projects:updProj,tasks:updTasks,habits:updHabits}));
+          save('objectives',updObj);save('projects',updProj);save('tasks',updTasks);save('habits',updHabits);
+
+          const summary=[];
+          summary.push(`🎯 Objetivo: ${newObj.title}`);
+          summary.push(`📁 Proyecto: ${newProj.title}`);
+          summary.push(`📋 ${newTasks.length} tareas`);
+          if(newHabits.length)summary.push(`🔁 ${newHabits.length} hábitos`);
+          savedLabel='🗺️ Plan creado\n'+summary.join(' · ');
+        }else if(action.action==='SAVE_TASK'&&action.data.title){
           const t={id:uid(),title:action.data.title,projectId:'',status:'todo',deadline:action.data.deadline||''};
           const upd=[t,...data.tasks];
           setData(d=>({...d,tasks:upd}));save('tasks',upd);
@@ -1113,10 +1204,16 @@ const MORE_NAV=NAV.slice(5);
 // ===================== MAIN APP =====================
 export default function App() {
   const [view,setView]=useState('dashboard');
+  const [viewHint,setViewHint]=useState(null);
   const [data,setData]=useState(null);
   const [showMore,setShowMore]=useState(false);
   const [apiKey,setApiKey]=useState(()=>localStorage.getItem('sb_gemini_key')||'');
   const isMobile=useIsMobile();
+
+  // Smart navigate: sets view + optional hint for target component
+  const navigate=(v,hint=null)=>{setView(v);setViewHint(hint);};
+  // Nav bar navigate: clears any hint
+  const navTo=(v)=>{setView(v);setViewHint(null);};
 
   useEffect(()=>{
     (async()=>{
@@ -1139,10 +1236,10 @@ export default function App() {
   const inboxCount=data.inbox.filter(i=>!i.processed).length;
   const props={data,setData,isMobile};
   const views={
-    dashboard:<Dashboard {...props}/>,
+    dashboard:<Dashboard {...props} onNavigate={navigate}/>,
     areas:<Areas {...props}/>,
     objectives:<Objectives {...props}/>,
-    projects:<ProjectsAndTasks {...props}/>,
+    projects:<ProjectsAndTasks {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
     notes:<Notes {...props}/>,
     inbox:<Inbox {...props}/>,
     habits:<HabitTracker {...props}/>,
@@ -1182,7 +1279,7 @@ export default function App() {
               const active=view===item.id;
               const badge=item.id==='inbox'&&inboxCount>0?inboxCount:null;
               return (
-                <button key={item.id} onClick={()=>setView(item.id)}
+                <button key={item.id} onClick={()=>navTo(item.id)}
                   style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:9,border:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit',fontSize:13,fontWeight:active?600:400,
                     background:active?`${T.accent}18`:'transparent',color:active?T.accent:T.muted,marginBottom:2,transition:'all 0.15s'}}>
                   <Icon name={item.icon} size={16} color={active?T.accent:undefined}/>
@@ -1193,7 +1290,7 @@ export default function App() {
             })}
           </nav>
           <div style={{padding:'12px 16px',borderTop:`1px solid ${T.border}`,display:'flex',flexDirection:'column',gap:6}}>
-            <div style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={()=>setView('settings')}>
+            <div style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={()=>navTo('settings')}>
               <span style={{width:7,height:7,borderRadius:'50%',background:apiKey?T.green:T.red,display:'inline-block',flexShrink:0}}/>
               <span style={{fontSize:11,color:apiKey?T.green:T.red,fontWeight:600}}>{apiKey?'Gemini activo':'Sin API Key'}</span>
             </div>
@@ -1214,7 +1311,7 @@ export default function App() {
             </span>
           </div>
           {inboxCount>0&&<span style={{background:T.red,color:'#fff',fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12}}>{inboxCount} inbox</span>}
-          <button onClick={()=>setView('settings')} style={{background:'none',border:`1px solid ${apiKey?T.green:T.red}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:apiKey?T.green:T.red,fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
+          <button onClick={()=>navTo('settings')} style={{background:'none',border:`1px solid ${apiKey?T.green:T.red}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:apiKey?T.green:T.red,fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
             <span style={{width:6,height:6,borderRadius:'50%',background:apiKey?T.green:T.red,display:'inline-block'}}/>
             {apiKey?'IA ON':'IA OFF'}
           </button>
@@ -1235,7 +1332,7 @@ export default function App() {
               <div style={{position:'absolute',bottom:65,left:0,right:0,background:T.surface,borderTop:`1px solid ${T.border}`,padding:16,display:'flex',gap:8,flexWrap:'wrap',justifyContent:'center'}}
                 onClick={e=>e.stopPropagation()}>
                 {MORE_NAV.map(item=>(
-                  <button key={item.id} onClick={()=>{setView(item.id);setShowMore(false);}}
+                  <button key={item.id} onClick={()=>{navTo(item.id);setShowMore(false);}}
                     style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,padding:'10px 20px',borderRadius:10,border:`1px solid ${view===item.id?T.accent:T.border}`,background:view===item.id?`${T.accent}18`:'transparent',cursor:'pointer',color:view===item.id?T.accent:T.muted,fontFamily:'inherit',minWidth:70}}>
                     <Icon name={item.icon} size={22} color={view===item.id?T.accent:undefined}/>
                     <span style={{fontSize:11,fontWeight:view===item.id?600:400}}>{item.label}</span>
@@ -1249,7 +1346,7 @@ export default function App() {
               const active=view===item.id;
               const badge=item.id==='inbox'&&inboxCount>0?inboxCount:null;
               return (
-                <button key={item.id} onClick={()=>setView(item.id)}
+                <button key={item.id} onClick={()=>navTo(item.id)}
                   style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'10px 4px 8px',border:'none',cursor:'pointer',background:'transparent',color:active?T.accent:T.dim,fontFamily:'inherit',position:'relative',gap:3}}>
                   <Icon name={item.icon} size={22} color={active?T.accent:undefined}/>
                   <span style={{fontSize:10,fontWeight:active?600:400}}>{item.label}</span>
@@ -1267,7 +1364,7 @@ export default function App() {
       )}
 
       {/* PSICKE — FLOATING BUBBLE */}
-      <Psicke apiKey={apiKey} onGoSettings={()=>setView('settings')} data={data} setData={setData}/>
+      <Psicke apiKey={apiKey} onGoSettings={()=>navTo('settings')} data={data} setData={setData}/>
 
     </div>
   );
