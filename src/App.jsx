@@ -771,16 +771,17 @@ const AIAssistant = ({data,setData,isMobile,apiKey,onGoSettings}) => {
   },null,2),[data]);
 
   const callGemini=async(history,imageB64=null)=>{
-    const contents=history.map((m,i)=>{
+    const sysEntry={role:'user',parts:[{text:`[INSTRUCCIONES DEL SISTEMA]\n${buildSystemPrompt(buildCtx())}\n\n[Confirma rol brevemente]`}]};
+    const sysReply={role:'model',parts:[{text:'Entendido. Soy tu Segundo Cerebro: capturo, estructuro y recuerdo. Adelante.'}]};
+    const contents=[sysEntry,sysReply,...history.map((m,i)=>{
       const parts=[];
       if(m.image&&i===history.length-1)parts.push({inlineData:{mimeType:'image/jpeg',data:m.image}});
       parts.push({text:m.content||' '});
       return{role:m.role==='assistant'?'model':'user',parts};
-    });
+    })];
     const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        system_instruction:{parts:[{text:buildSystemPrompt(buildCtx())}]},
         contents,
         generationConfig:{temperature:0.75,maxOutputTokens:1024},
       })
@@ -1070,11 +1071,14 @@ const Psicke=({apiKey,onGoSettings})=>{
     const next=[...msgs,userMsg];
     setMsgs(next);setInput('');setLoading(true);
     try{
-      const contents=next.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
+      const contents=[
+        {role:'user',parts:[{text:`[INSTRUCCIONES DEL SISTEMA]\n${PSICKE_PROMPT}\n\n[Confirma que entendiste tu rol en una sola línea]`}]},
+        {role:'model',parts:[{text:'Entendido. Soy Psicke — directa, concisa y siempre aquí. ¿En qué te puedo ayudar?'}]},
+        ...next.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
+      ];
       const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          system_instruction:{parts:[{text:PSICKE_PROMPT}]},
           contents,
           generationConfig:{temperature:0.85,maxOutputTokens:512},
         })
