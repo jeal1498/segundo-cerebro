@@ -305,12 +305,15 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
 
 // ===================== AREA DETAIL =====================
 const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) => {
-  const areaId=viewHint||'';
-  const area=data.areas.find(a=>a.id===areaId);
+  const [areaId,setAreaId]=useState(viewHint||'');
   const [budgetModal,setBudgetModal]=useState(false);
   const [budgetForm,setBudgetForm]=useState({title:'',amount:'',dayOfMonth:'',currency:'MXN'});
 
-  useEffect(()=>{if(viewHint)onConsumeHint?.();},[viewHint]);
+  useEffect(()=>{
+    if(viewHint){setAreaId(viewHint);onConsumeHint?.();}
+  },[viewHint]);
+
+  const area=data.areas.find(a=>a.id===areaId);
 
   if(!area) return <div style={{textAlign:'center',padding:40,color:T.dim}}>Área no encontrada</div>;
 
