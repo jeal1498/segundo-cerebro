@@ -527,8 +527,6 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
       )}
     </div>
   );}
-    </div>
-  );
 
   const TaskDetail=()=>(
     <div>
