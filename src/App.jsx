@@ -1021,7 +1021,217 @@ const Settings = ({apiKey,setApiKey,isMobile}) => {
   );
 };
 
-// ===================== NAVIGATION =====================
+// ===================== PSICKE — FLOATING BRAIN =====================
+const PSICKE_PROMPT=`Eres Psicke — una IA flotante, omnipresente y directa que vive dentro del Segundo Cerebro del usuario.
+
+Tu personalidad:
+- Concisa y contundente. Sin rodeos, sin relleno.
+- Sarcástica con gracia cuando el usuario es vago, redundante o dramático.
+- Empática cuando el momento lo requiere, pero nunca empalagosa.
+- Hablas en español, tuteas siempre.
+
+Tu función principal:
+1. Responder preguntas del usuario sobre su vida, sus datos, sus ideas.
+2. Ayudarle a pensar, decidir o aclarar algo rápido.
+3. Si el usuario menciona algo que debería guardarse (gasto, evento, idea, tarea), sugiérelo brevemente.
+
+Reglas:
+- Respuestas cortas (máx 3 párrafos o equivalente).
+- NO generes JSON ni intentes guardar nada — solo conversa.
+- Si el usuario está bloqueado, hazle UNA pregunta poderosa que le desbloquee.
+- Responde siempre en español.`;
+
+const Psicke=({apiKey,onGoSettings})=>{
+  const [open,setOpen]=useState(false);
+  const [msgs,setMsgs]=useState([{role:'assistant',content:'Aquí Psicke. ¿En qué estás pensando?'}]);
+  const [input,setInput]=useState('');
+  const [loading,setLoading]=useState(false);
+  const [recording,setRecording]=useState(false);
+  const [pulse,setPulse]=useState(false);
+  const bottomRef=useRef(null);
+  const recRef=useRef(null);
+  const inputRef=useRef(null);
+
+  useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:'smooth'});},[msgs,open]);
+  useEffect(()=>{if(open)setTimeout(()=>inputRef.current?.focus(),300);},[open]);
+
+  // Subtle pulse every 8s to remind user Psicke exists
+  useEffect(()=>{
+    if(open)return;
+    const t=setInterval(()=>{setPulse(true);setTimeout(()=>setPulse(false),1200);},8000);
+    return()=>clearInterval(t);
+  },[open]);
+
+  const send=async(textOverride=null)=>{
+    const text=(textOverride??input).trim();
+    if(!text||loading)return;
+    if(!apiKey){setOpen(false);onGoSettings();return;}
+    const userMsg={role:'user',content:text};
+    const next=[...msgs,userMsg];
+    setMsgs(next);setInput('');setLoading(true);
+    try{
+      const contents=next.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          system_instruction:{parts:[{text:PSICKE_PROMPT}]},
+          contents,
+          generationConfig:{temperature:0.85,maxOutputTokens:512},
+        })
+      });
+      const d=await res.json();
+      if(d.error)throw new Error(d.error.message);
+      const reply=d.candidates?.[0]?.content?.parts?.[0]?.text||'...';
+      setMsgs(p=>[...p,{role:'assistant',content:reply}]);
+    }catch(e){
+      setMsgs(p=>[...p,{role:'assistant',content:`⚠️ ${e.message}`}]);
+    }
+    setLoading(false);
+  };
+
+  const toggleMic=()=>{
+    if(recording){recRef.current?.stop();setRecording(false);return;}
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR)return;
+    const r=new SR();r.lang='es-MX';r.continuous=false;r.interimResults=false;
+    r.onresult=e=>{setInput(e.results[0][0].transcript);setRecording(false);};
+    r.onerror=r.onend=()=>setRecording(false);
+    recRef.current=r;r.start();setRecording(true);
+  };
+
+  return(
+    <>
+      <style>{`
+        @keyframes psicke-in{from{opacity:0;transform:translateY(32px) scale(0.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes psicke-pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,160,23,0.5)}50%{box-shadow:0 0 0 12px rgba(212,160,23,0)}}
+        @keyframes psicke-dot{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+        @keyframes psicke-ring{0%{opacity:0.6;transform:scale(1)}100%{opacity:0;transform:scale(1.8)}}
+        .psicke-bubble:active{transform:scale(0.93)!important;}
+      `}</style>
+
+      {/* CHAT PANEL */}
+      {open&&(
+        <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}
+          onClick={e=>e.target===e.currentTarget&&setOpen(false)}>
+          {/* Backdrop */}
+          <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.55)',backdropFilter:'blur(6px)'}} onClick={()=>setOpen(false)}/>
+
+          {/* Panel */}
+          <div style={{position:'relative',zIndex:1,background:T.surface,borderRadius:'20px 20px 0 0',border:`1px solid ${T.borderLight}`,borderBottom:'none',
+            maxHeight:'78vh',display:'flex',flexDirection:'column',
+            animation:'psicke-in 0.28s cubic-bezier(0.34,1.56,0.64,1) both',
+            boxShadow:'0 -8px 48px rgba(0,0,0,0.6)'}}>
+
+            {/* Handle + header */}
+            <div style={{padding:'12px 20px 0',flexShrink:0}}>
+              <div style={{width:36,height:4,background:T.border,borderRadius:2,margin:'0 auto 14px'}}/>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{width:34,height:34,borderRadius:10,background:`linear-gradient(135deg,${T.accent},${T.orange})`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    <Icon name="brain" size={17} color="#000"/>
+                  </div>
+                  <div>
+                    <div style={{color:T.text,fontWeight:700,fontSize:15,fontFamily:"'Playfair Display',serif",lineHeight:1}}>Psicke</div>
+                    <div style={{color:T.muted,fontSize:11,marginTop:2}}>Tu IA personal · siempre aquí</div>
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <button onClick={()=>setMsgs([{role:'assistant',content:'Aquí Psicke. ¿En qué estás pensando?'}])}
+                    style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'4px 10px',cursor:'pointer',color:T.dim,fontSize:11,fontFamily:'inherit'}}>
+                    Borrar
+                  </button>
+                  <button onClick={()=>setOpen(false)}
+                    style={{background:'none',border:'none',cursor:'pointer',color:T.muted,display:'flex',padding:4}}>
+                    <Icon name="x" size={20}/>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:10,minHeight:0}}>
+              {msgs.map((m,i)=>{
+                const isUser=m.role==='user';
+                return(
+                  <div key={i} style={{display:'flex',justifyContent:isUser?'flex-end':'flex-start'}}>
+                    {!isUser&&<div style={{width:24,height:24,borderRadius:7,background:`${T.accent}22`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginRight:8,marginTop:2}}>
+                      <Icon name="brain" size={12} color={T.accent}/>
+                    </div>}
+                    <div style={{maxWidth:'82%',padding:'9px 13px',borderRadius:13,fontSize:14,lineHeight:1.6,whiteSpace:'pre-wrap',
+                      background:isUser?T.accent:T.surface2,
+                      color:isUser?'#000':T.text,
+                      borderBottomRightRadius:isUser?2:13,
+                      borderBottomLeftRadius:!isUser?2:13,
+                      border:!isUser?`1px solid ${T.border}`:'none'}}>
+                      {m.content}
+                    </div>
+                  </div>
+                );
+              })}
+              {loading&&(
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:24,height:24,borderRadius:7,background:`${T.accent}22`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    <Icon name="brain" size={12} color={T.accent}/>
+                  </div>
+                  <div style={{padding:'9px 14px',borderRadius:13,borderBottomLeftRadius:2,background:T.surface2,border:`1px solid ${T.border}`,display:'flex',gap:4,alignItems:'center'}}>
+                    {[0,1,2].map(i=><span key={i} style={{width:6,height:6,borderRadius:'50%',background:T.accent,display:'inline-block',animation:`psicke-dot 0.9s ${i*0.18}s ease-in-out infinite`}}/>)}
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef}/>
+            </div>
+
+            {/* Input area */}
+            <div style={{padding:'12px 16px 20px',flexShrink:0,borderTop:`1px solid ${T.border}`,marginTop:8}}>
+              {recording&&<div style={{textAlign:'center',color:T.red,fontSize:11,fontWeight:600,marginBottom:6,letterSpacing:1}}>● ESCUCHANDO</div>}
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <button onClick={toggleMic} style={{
+                  width:38,height:38,borderRadius:'50%',border:`2px solid ${recording?T.red:T.border}`,
+                  background:recording?`${T.red}22`:'transparent',cursor:'pointer',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  color:recording?T.red:T.muted,flexShrink:0,transition:'all 0.2s'}}>
+                  <Icon name={recording?'micoff':'mic'} size={16} color={recording?T.red:undefined}/>
+                </button>
+                <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)}
+                  onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()}
+                  placeholder="Pregunta, idea, decisión..."
+                  style={{flex:1,background:T.bg,border:`1px solid ${T.border}`,color:T.text,
+                    padding:'10px 14px',borderRadius:12,fontSize:14,outline:'none',fontFamily:'inherit'}}/>
+                <button onClick={()=>send()} disabled={!input.trim()||loading}
+                  style={{width:38,height:38,borderRadius:'50%',border:'none',flexShrink:0,
+                    background:input.trim()&&!loading?T.accent:'transparent',
+                    border:input.trim()&&!loading?'none':`1px solid ${T.border}`,
+                    cursor:input.trim()&&!loading?'pointer':'not-allowed',
+                    display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>
+                  <Icon name="send" size={16} color={input.trim()&&!loading?'#000':T.dim}/>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING BUBBLE */}
+      {!open&&(
+        <button className="psicke-bubble" onClick={()=>setOpen(true)}
+          style={{
+            position:'fixed',bottom:80,right:18,zIndex:999,
+            width:54,height:54,borderRadius:'50%',border:'none',cursor:'pointer',
+            background:`linear-gradient(135deg,${T.accent},${T.orange})`,
+            display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:1,
+            boxShadow:'0 4px 20px rgba(212,160,23,0.4)',
+            transition:'transform 0.2s cubic-bezier(0.34,1.56,0.64,1)',
+            animation:pulse?'psicke-pulse 1.2s ease-out':'none',
+          }}>
+          {/* Ripple ring when pulsing */}
+          {pulse&&<div style={{position:'absolute',inset:-2,borderRadius:'50%',border:`2px solid ${T.accent}`,animation:'psicke-ring 1.2s ease-out both',pointerEvents:'none'}}/>}
+          <Icon name="brain" size={22} color="#000"/>
+          <span style={{fontSize:7,fontWeight:800,color:'#000',letterSpacing:'0.05em',lineHeight:1,fontFamily:"'DM Sans',sans-serif"}}>PSICKE</span>
+        </button>
+      )}
+    </>
+  );
+};
 const NAV=[
   {id:'dashboard',label:'Inicio',icon:'home'},
   {id:'areas',label:'Áreas',icon:'grid'},
@@ -1192,6 +1402,10 @@ export default function App() {
           </div>
         </>
       )}
+
+      {/* PSICKE — FLOATING BUBBLE */}
+      <Psicke apiKey={apiKey} onGoSettings={()=>setView('settings')}/>
+
     </div>
   );
 }
