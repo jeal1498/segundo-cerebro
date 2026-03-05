@@ -307,8 +307,7 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
 // ===================== AREA DETAIL =====================
 const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) => {
   const [areaId,setAreaId]=useState(viewHint||'');
-  const [budgetModal,setBudgetModal]=useState(false);
-  const [budgetForm,setBudgetForm]=useState({title:'',amount:'',dayOfMonth:'',currency:'MXN'});
+
 
   useEffect(()=>{
     if(viewHint){setAreaId(viewHint);onConsumeHint?.();}
@@ -326,13 +325,6 @@ const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
   const areaBudget=(data.budget||[]).filter(b=>b.areaId===areaId);
   const totalBudget=areaBudget.reduce((s,b)=>s+(b.amount||0),0);
 
-  const saveBudgetItem=()=>{
-    if(!budgetForm.title.trim()||!budgetForm.amount)return;
-    const b={id:uid(),title:budgetForm.title,amount:Number(budgetForm.amount),currency:budgetForm.currency||'MXN',dayOfMonth:Number(budgetForm.dayOfMonth)||1,areaId,createdAt:today()};
-    const upd=[b,...(data.budget||[])];
-    setData(d=>({...d,budget:upd}));save('budget',upd);
-    setBudgetModal(false);setBudgetForm({title:'',amount:'',dayOfMonth:'',currency:'MXN'});
-  };
   const delBudget=(id)=>{const u=(data.budget||[]).filter(b=>b.id!==id);setData(d=>({...d,budget:u}));save('budget',u);};
 
   // Group spending by month
@@ -360,36 +352,34 @@ const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
         <Btn size="sm" onClick={()=>onNavigate&&onNavigate('projects',areaProjects[0]?`obj:${areaProjects[0].objectiveId}`:null)}><Icon name="folder" size={12}/>Proyectos ({areaProjects.length})</Btn>
       </div>
 
-      {/* Financial Summary */}
-      {(notesWithAmount.length>0||areaBudget.length>0)&&(
+      {/* Financial Summary — solo si hay registros de gasto en esta área */}
+      {notesWithAmount.length>0&&(
         <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(3,1fr)',gap:10,marginBottom:20}}>
           <Card style={{textAlign:'center',padding:14}}>
-            <div style={{fontSize:11,color:T.muted,marginBottom:4}}>Gastado</div>
+            <div style={{fontSize:11,color:T.muted,marginBottom:4}}>Gastado total</div>
             <div style={{fontSize:22,fontWeight:700,color:T.red}}>${totalSpent.toLocaleString()}</div>
             <div style={{fontSize:10,color:T.dim}}>{notesWithAmount.length} registros</div>
           </Card>
           <Card style={{textAlign:'center',padding:14}}>
-            <div style={{fontSize:11,color:T.muted,marginBottom:4}}>Presupuesto/mes</div>
-            <div style={{fontSize:22,fontWeight:700,color:T.accent}}>${totalBudget.toLocaleString()}</div>
-            <div style={{fontSize:10,color:T.dim}}>{areaBudget.length} items fijos</div>
-          </Card>
-          {!isMobile&&<Card style={{textAlign:'center',padding:14}}>
             <div style={{fontSize:11,color:T.muted,marginBottom:4}}>Este mes</div>
             <div style={{fontSize:22,fontWeight:700,color:T.text}}>${(spendingByMonth[today().slice(0,7)]?.total||0).toLocaleString()}</div>
             <div style={{fontSize:10,color:T.dim}}>{spendingByMonth[today().slice(0,7)]?.items?.length||0} gastos</div>
+          </Card>
+          {areaBudget.length>0&&<Card style={{textAlign:'center',padding:14}}>
+            <div style={{fontSize:11,color:T.muted,marginBottom:4}}>Presupuesto/mes</div>
+            <div style={{fontSize:22,fontWeight:700,color:T.accent}}>${totalBudget.toLocaleString()}</div>
+            <div style={{fontSize:10,color:T.dim}}>{areaBudget.length} items fijos</div>
           </Card>}
         </div>
       )}
 
-      {/* Budget items */}
-      <div style={{marginBottom:24}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>💳 Presupuesto fijo</h3>
-          <Btn size="sm" onClick={()=>setBudgetModal(true)}><Icon name="plus" size={12}/>Agregar</Btn>
-        </div>
-        {areaBudget.length===0
-          ?<p style={{color:T.dim,fontSize:13,textAlign:'center',padding:'12px 0'}}>Sin gastos fijos. Agregue items recurrentes como renta, escuela, servicios.</p>
-          :areaBudget.map(b=>(
+      {/* Budget items — solo si esta área ya tiene gastos fijos asignados */}
+      {areaBudget.length>0&&(
+        <div style={{marginBottom:24}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>💳 Presupuesto fijo</h3>
+          </div>
+          {areaBudget.map(b=>(
             <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:8}}>
               <div style={{flex:1}}>
                 <div style={{color:T.text,fontSize:14,fontWeight:500}}>{b.title}</div>
@@ -398,9 +388,9 @@ const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
               <div style={{color:T.accent,fontWeight:700,fontSize:15}}>${b.amount.toLocaleString()}</div>
               <button onClick={()=>delBudget(b.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
             </div>
-          ))
-        }
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Spending history */}
       {notesWithAmount.length>0&&(
@@ -444,17 +434,7 @@ const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
         </div>
       )}
 
-      {/* Budget Modal */}
-      {budgetModal&&(
-        <Modal title="Nuevo gasto fijo" onClose={()=>setBudgetModal(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <Input value={budgetForm.title} onChange={v=>setBudgetForm(f=>({...f,title:v}))} placeholder="Concepto (ej: Escuela, Renta, Netflix)"/>
-            <Input type="number" value={budgetForm.amount} onChange={v=>setBudgetForm(f=>({...f,amount:v}))} placeholder="Monto mensual"/>
-            <Input type="number" value={budgetForm.dayOfMonth} onChange={v=>setBudgetForm(f=>({...f,dayOfMonth:v}))} placeholder="Día del mes (1-31)"/>
-            <Btn onClick={saveBudgetItem} style={{width:'100%',justifyContent:'center'}}>Agregar al presupuesto</Btn>
-          </div>
-        </Modal>
-      )}
+
     </div>
   );
 };
