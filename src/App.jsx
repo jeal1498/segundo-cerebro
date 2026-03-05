@@ -692,7 +692,7 @@ const HabitTracker = ({data,setData,isMobile}) => {
 };
 
 // ===================== AI ASSISTANT =====================
-const GEMINI_MODEL='gemini-2.0-flash';
+const GEMINI_MODEL='gemini-1.5-flash';
 const TODAY_DATE=new Date().toISOString().split('T')[0];
 
 const buildSystemPrompt=(ctx)=>`Eres el "Segundo Cerebro" — un asistente de memoria personal brutalmente eficiente, directo, y con humor ácido cuando el usuario es vago.
@@ -1005,7 +1005,7 @@ const Settings = ({apiKey,setApiKey,isMobile}) => {
         <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:10}}>Acerca del Asistente</div>
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
           {[
-            {icon:'brain',label:'Modelo',val:`Google ${GEMINI_MODEL}`},
+            {icon:'brain',label:'Modelo',val:`Google gemini-1.5-flash`},
             {icon:'note',label:'Auto-guardado',val:'Notas + etiquetas'},
             {icon:'mic',label:'Voz',val:'Web Speech API (español)'},
             {icon:'image',label:'Imágenes',val:'OCR visual con Gemini'},
@@ -1076,7 +1076,7 @@ const Psicke=({apiKey,onGoSettings})=>{
         {role:'model',parts:[{text:'Entendido. Soy Psicke — directa, concisa y siempre aquí. ¿En qué te puedo ayudar?'}]},
         ...next.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
       ];
-      const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`,{
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           contents,
