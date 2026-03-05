@@ -224,7 +224,10 @@ const Dashboard = ({data,isMobile,onNavigate}) => {
                 style={{marginBottom:8,padding:'12px 14px',background:T.surface2,borderRadius:10,borderLeft:`3px solid ${T.accent}`,cursor:'pointer',transition:'opacity 0.15s'}}
                 onMouseEnter={e=>e.currentTarget.style.opacity='0.8'}
                 onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
-                <div style={{color:T.text,fontSize:13,fontWeight:500}}>{n.title}</div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                  <div style={{color:T.text,fontSize:13,fontWeight:500,flex:1,minWidth:0}}>{n.title}</div>
+                  {n.amount&&<span style={{color:T.green,fontSize:11,fontWeight:600,flexShrink:0,marginLeft:6}}>${n.amount}</span>}
+                </div>
                 <div style={{color:T.muted,fontSize:11,marginTop:3}}>{fmt(n.createdAt)}</div>
               </div>
             ))
@@ -621,7 +624,10 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
     setData(d=>({...d,notes:updated}));save('notes',updated);
     if(sel?.id===id){setSel(null);setShowNote(false);}
   };
-  const filtered=data.notes.filter(n=>n.title.toLowerCase().includes(search.toLowerCase())||n.content.toLowerCase().includes(search.toLowerCase()));
+  const filtered=data.notes.filter(n=>{
+    const q=search.toLowerCase();
+    return n.title.toLowerCase().includes(q)||n.content.toLowerCase().includes(q)||(n.tags||[]).some(t=>t.toLowerCase().includes(q));
+  });
 
   const NoteList=()=>(
     <div>
@@ -630,9 +636,15 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
       {filtered.map(n=>(
         <div key={n.id} onClick={()=>{setSel(n);if(isMobile)setShowNote(true);}}
           style={{padding:'12px 14px',borderRadius:10,cursor:'pointer',marginBottom:8,background:sel?.id===n.id&&!isMobile?T.surface2:T.surface,border:`1px solid ${sel?.id===n.id&&!isMobile?T.accent:T.border}`,transition:'border-color 0.15s'}}>
-          <div style={{color:T.text,fontSize:14,fontWeight:500,marginBottom:2}}>{n.title}</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+            <div style={{color:T.text,fontSize:14,fontWeight:500,marginBottom:2,flex:1,minWidth:0}}>{n.title}</div>
+            {n.amount&&<span style={{color:T.green,fontSize:12,fontWeight:600,flexShrink:0,marginLeft:8}}>💰 ${n.amount}</span>}
+          </div>
           <div style={{color:T.muted,fontSize:12,marginBottom:3}}>{n.content.slice(0,60)}{n.content.length>60?'...':''}</div>
-          <div style={{color:T.dim,fontSize:11}}>{fmt(n.createdAt)}</div>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <span style={{color:T.dim,fontSize:11}}>{fmt(n.createdAt)}</span>
+            {n.tags?.slice(0,3).map(t=><span key={t} style={{fontSize:10,color:T.accent,background:`${T.accent}15`,padding:'1px 6px',borderRadius:8}}>{t}</span>)}
+          </div>
         </div>
       ))}
       {!filtered.length&&<p style={{color:T.dim,fontSize:13,textAlign:'center',padding:'20px 0'}}>Sin notas</p>}
@@ -649,6 +661,7 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
       <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
         {sel?.tags?.map(t=><Tag key={t} text={t}/>)}
         {sel?.areaId&&(()=>{const a=data.areas.find(x=>x.id===sel.areaId);return a?<Tag text={`${a.icon} ${a.name}`} color={a.color}/>:null;})()}
+        {sel?.amount&&<Tag text={`💰 $${sel.amount} ${sel.currency||'MXN'}`} color={T.green}/>}
         <span style={{color:T.dim,fontSize:12,alignSelf:'center'}}>{fmt(sel?.createdAt)}</span>
       </div>
       <p style={{color:T.text,fontSize:15,lineHeight:1.8,whiteSpace:'pre-wrap',margin:0}}>{sel?.content}</p>
@@ -917,13 +930,23 @@ const Settings = ({apiKey,setApiKey,isMobile}) => {
 // ===================== PSICKE — FLOATING BRAIN =====================
 const buildPsickePrompt=(data)=>{
   const t=today();
-  const notesSummary=data.notes.slice(0,10).map(n=>`• ${n.title}`).join('\n');
+  const notesSummary=data.notes.slice(0,15).map(n=>{
+    let s=`• ${n.title}`;
+    if(n.amount)s+=` ($${n.amount})`;
+    if(n.tags?.length)s+=` [${n.tags.join(',')}]`;
+    return s;
+  }).join('\n');
   const tasksPending=data.tasks.filter(t=>t.status==='todo');
   const tasksSummary=tasksPending.slice(0,10).map(t=>`• ${t.title}${t.deadline?' ('+t.deadline+')':''}`).join('\n');
   const inboxPending=data.inbox.filter(i=>!i.processed);
   const habitNames=data.habits.map(h=>h.name).join(', ');
   const areaNames=data.areas.map(a=>`${a.icon} ${a.name}`).join(', ');
+  const areaMap=data.areas.map(a=>`"${a.name}" → "${a.id}"`).join(', ');
   const objectives=data.objectives.filter(o=>o.status==='active').map(o=>`• ${o.title}`).join('\n');
+
+  // Collect existing tags for consistency
+  const allTags=[...new Set(data.notes.flatMap(n=>n.tags||[]))].slice(0,30);
+  const tagList=allTags.length?allTags.join(', '):'(sin tags aún)';
 
   return `Eres Psicke — la IA que vive dentro del Segundo Cerebro del usuario. No eres un chatbot genérico; eres SU extensión mental.
 
@@ -938,51 +961,70 @@ HOY: ${t}
 - NUNCA digas "como asistente de IA" ni nada corporate. Eres Psicke, punto.
 
 ═══ LO QUE PUEDES HACER ═══
-1. CONVERSAR — El usuario piensa en voz alta contigo. Le ayudas a ordenar ideas, tomar decisiones, o simplemente a procesar algo.
-2. RESUMIR — Si pregunta por sus datos, le das un resumen claro de sus notas, tareas, hábitos, objetivos.
-3. GUARDAR — Items individuales: tareas, notas, capturas al inbox.
-4. PLANIFICAR — Crear planes completos con objetivo + proyecto + tareas + hábitos, todo conectado.
+1. CONVERSAR — El usuario piensa en voz alta. Le ayuda a ordenar ideas, decidir o procesar.
+2. RESUMIR — Resúmenes claros de notas, tareas, hábitos, objetivos, gastos.
+3. GUARDAR — Items individuales: tareas, notas (con montos si aplica), capturas al inbox.
+4. PLANIFICAR — Planes completos: objetivo + proyecto + tareas + hábitos, todo conectado.
 
 ═══ DATOS ACTUALES DEL USUARIO ═══
-Áreas disponibles: ${areaNames || 'Ninguna'}
+Áreas: ${areaNames || 'Ninguna'}
+Mapa de áreas (nombre → id): ${areaMap || 'sin áreas'}
+
 Objetivos activos:
 ${objectives || '(sin objetivos)'}
+
 Tareas pendientes (${tasksPending.length}):
 ${tasksSummary || '(sin tareas)'}
-Notas recientes:
+
+Notas recientes (con montos y tags):
 ${notesSummary || '(sin notas)'}
+
+Tags existentes: ${tagList}
 Inbox sin procesar: ${inboxPending.length} items
 Hábitos: ${habitNames || '(sin hábitos)'}
 
 ═══ PROTOCOLO DE CLASIFICACIÓN INTELIGENTE ═══
-Antes de guardar, DECIDE el tipo correcto. NUNCA mandes al inbox algo que ya puedes clasificar.
+NUNCA mandes al inbox algo que ya puedas clasificar. Piensa así:
 
-ÁRBOL DE DECISIÓN — aplícalo en orden:
+ÁRBOL DE DECISIÓN:
 1. ¿Hay algo que HACER en el futuro? → SAVE_TASK
-   Ejemplos: "recuerda llamar al médico", "tengo que pagar la renta", "pendiente: mandar el reporte"
+   "llamar al mecánico", "pagar la renta", "mandar el reporte"
 
-2. ¿Es un REGISTRO, DATO, GASTO, APRENDIZAJE o REFERENCIA? → SAVE_NOTE con área correcta
-   Ejemplos:
-   - "pagué 200 en gas lp" → Nota en área Finanzas, tags: ["gastos","transporte"]
-   - "aprendí que el ayuno mejora X" → Nota en área Salud, tags: ["salud","aprendizaje"]
-   - "el cliente dijo que prefiere entregas los lunes" → Nota en área Trabajo, tags: ["clientes"]
-   - "idea para el negocio: ofrecer suscripción mensual" → Nota en área Trabajo, tags: ["ideas"]
-   - "gasté 500 en la despensa" → Nota en área Finanzas, tags: ["gastos","alimentación"]
+2. ¿Es INFORMACIÓN, REGISTRO, GASTO, DATO, EXPERIENCIA o REFERENCIA? → SAVE_NOTE
+   Esto incluye CUALQUIER dato que el usuario comparta sobre su vida:
+   - GASTOS/COMPRAS: "cargué gas a $150" → nota con amount, área Finanzas, tags del tema
+   - MANTENIMIENTO: "servicio del coche a 73000km, $3400" → nota con amount, datos en content
+   - EXPERIENCIAS: "probé tal restaurante, estuvo bueno" → nota, área Personal
+   - APRENDIZAJES: "descubrí que el ayuno..." → nota, área Salud
+   - INFO DE TRABAJO: "el cliente prefiere lunes" → nota, área Trabajo
+   - IDEAS: "idea: ofrecer suscripción" → nota, área Trabajo, tag ideas
+   - SALUD: "hoy pesé 82kg" → nota, área Salud, tag registro
 
-3. ¿Es algo AMBIGUO que no sabes aún si es tarea, nota o proyecto? → SAVE_INBOX
-   Solo usar inbox cuando genuinamente no hay suficiente contexto para clasificar.
+3. ¿Es AMBIGUO sin contexto suficiente? → SAVE_INBOX (último recurso)
 
-REGLA DE ORO: El inbox es el ÚLTIMO recurso, no el primero. Si el usuario menciona un área obvia (dinero/gastos → Finanzas, salud/ejercicio → Salud, trabajo/clientes → Trabajo), clasifícalo directo como nota en esa área.
+═══ REGLAS DE CLASIFICACIÓN ═══
+- CONSISTENCIA DE TAGS: Reutiliza tags existentes del usuario: ${tagList}
+  Si el usuario ya tiene tag "auto" o "coche", usa el mismo. No crees "vehículo" si ya existe "auto".
+- AGRUPACIÓN: Datos del mismo tema deben compartir al menos 1 tag para agruparse.
+  Ejemplo: "gas del coche" y "servicio del coche" ambos llevan tag "auto" o "coche".
+- MONTOS: Si hay cualquier cantidad de dinero, SIEMPRE incluye amount y currency.
+- ÁREA: Mapea al área correcta del usuario. Usa el id exacto del mapa de áreas.
+  Si no hay coincidencia, deja areaId vacío "".
+- CONTENIDO RICO: El content debe incluir TODO el contexto: cantidades, precios unitarios, kilometraje, fechas, ubicación — lo que sea que el usuario haya dicho.
+- TITULO DESCRIPTIVO: No genérico. "Gas LP coche — 5L" mejor que "Compra de gas".
 
-ÁREA EN NOTAS: Siempre incluye el areaId correcto buscando coincidencia con las áreas del usuario:
-Áreas disponibles: ${areaNames || 'Ninguna (guardar sin área)'}
+═══ FORMATOS DE GUARDADO ═══
 
-Nota con área: \`\`\`json
-{"action":"SAVE_NOTE","data":{"title":"título","content":"detalle completo","tags":["tag1","tag2"],"areaId":"id_del_area"}}
+Nota (con monto): \`\`\`json
+{"action":"SAVE_NOTE","data":{"title":"Gas LP coche — 5L","content":"5 litros de gas LP a $10/L para el coche. Total: $50","tags":["auto","gastos","combustible"],"area":"Finanzas","amount":50,"currency":"MXN"}}
+\`\`\`
+
+Nota (sin monto): \`\`\`json
+{"action":"SAVE_NOTE","data":{"title":"Cliente prefiere entregas lunes","content":"El cliente X mencionó que prefiere recibir entregas los lunes temprano","tags":["clientes","entregas"],"area":"Trabajo"}}
 \`\`\`
 
 Tarea: \`\`\`json
-{"action":"SAVE_TASK","data":{"title":"título accionable","priority":"media"}}
+{"action":"SAVE_TASK","data":{"title":"Llamar al mecánico por frenos","priority":"alta"}}
 \`\`\`
 
 Inbox (solo si es ambiguo): \`\`\`json
@@ -1000,8 +1042,7 @@ Hazle 1-2 preguntas clave para armar un buen plan (en usted):
 Sea conversacional, no haga un interrogatorio. Una o dos preguntas por mensaje máx.
 
 PASO 2 — CONFIRMA:
-Cuando tenga suficiente info, presente un resumen breve del plan y pregunte si le parece bien. Ejemplo:
-"Ok, le armo esto: Objetivo 'Bajar 5kg' para mayo, con un proyecto de plan alimenticio y ejercicio, tareas semanales concretas y hábitos diarios. ¿Le damos?"
+Cuando tenga suficiente info, presente un resumen breve del plan y pregunte si le parece bien.
 
 PASO 3 — GENERA (solo cuando el usuario confirme):
 \`\`\`json
@@ -1024,22 +1065,27 @@ PASO 3 — GENERA (solo cuando el usuario confirme):
 \`\`\`
 
 REGLAS DE PLANIFICACIÓN:
-- "area" debe coincidir con un área existente del usuario: ${areaNames || '(sin áreas)'}. Si ninguna aplica, usa "".
-- Las tareas deben ser ACCIONABLES y CONCRETAS — no genéricas.
-- Los hábitos son acciones RECURRENTES que soporten el objetivo.
-- El deadline del objetivo debe ser una fecha realista basada en lo que dijo el usuario.
-- Genera entre 3-8 tareas y 1-4 hábitos según la complejidad.
-- NUNCA generes el plan sin que el usuario haya confirmado primero.
+- "area" debe coincidir con un área existente: ${areaNames || '(sin áreas)'}. Si ninguna aplica, usa "".
+- Tareas ACCIONABLES y CONCRETAS, no genéricas.
+- Hábitos son acciones RECURRENTES.
+- Genera 3-8 tareas y 1-4 hábitos según complejidad.
+- NUNCA generes el plan sin confirmación del usuario.
+
+═══ CONSULTAS SOBRE DATOS ═══
+Si el usuario pregunta "¿cuánto he gastado en X?", "¿qué notas tengo de Y?", "¿cuántas tareas pendientes?":
+- Busca en los datos actuales y responde con números concretos.
+- Si hay notas con montos, suma y presenta el total.
+- Agrupa por tags o área cuando sea relevante.
 
 ═══ REGLAS GENERALES ═══
-- Solo UNA acción JSON por mensaje (SAVE_TASK, SAVE_NOTE, SAVE_INBOX, o SAVE_PLAN).
-- El JSON va DESPUÉS de tu respuesta conversacional.
-- Si no tienes suficiente info, pregunta antes de generar JSON.
-- NUNCA inventes datos que el usuario no dijo.
-- Respuestas cortas: máx 3 párrafos (excepto cuando presentas un plan).
-- Si el usuario está bloqueado, hazle UNA pregunta que lo desbloquee.
-- No repitas lo que el usuario acaba de decir.
-- RECUERDA: siempre de usted. "¿Le parece?", "Su objetivo", "Le ayudo", nunca "te parece", "tu objetivo", "te ayudo".`;
+- Solo UNA acción JSON por mensaje.
+- El JSON va DESPUÉS de la respuesta conversacional.
+- Si no tiene suficiente info, pregunte antes de generar JSON.
+- NUNCA invente datos que el usuario no dijo.
+- Respuestas cortas: máx 3 párrafos (excepto planes).
+- Si el usuario está bloqueado, hágale UNA pregunta que lo desbloquee.
+- No repita lo que el usuario acaba de decir.
+- RECUERDE: siempre de usted.`;
 };
 
 const parsePsickeAction=(text)=>{
@@ -1177,10 +1223,12 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
             resolvedAreaId = match?.id || '';
           }
           const areaLabel = resolvedAreaId ? data.areas.find(a=>a.id===resolvedAreaId) : null;
-          const n={id:uid(),title:action.data.title,content:action.data.content||'',tags:action.data.tags||[],areaId:resolvedAreaId,createdAt:td};
+          const n={id:uid(),title:action.data.title,content:action.data.content||'',tags:action.data.tags||[],areaId:resolvedAreaId,createdAt:td,
+            ...(action.data.amount?{amount:Number(action.data.amount),currency:action.data.currency||'MXN'}:{})};
           const upd=[n,...data.notes];
           setData(d=>({...d,notes:upd}));save('notes',upd);
-          savedLabel=`📝 Nota guardada${areaLabel?` · ${areaLabel.icon} ${areaLabel.name}`:''}`;
+          const amountStr=n.amount?` · 💰 $${n.amount} ${n.currency||''}`:'';
+          savedLabel=`📝 Nota guardada${areaLabel?` · ${areaLabel.icon} ${areaLabel.name}`:''}${amountStr}`;
         }else if(action.action==='SAVE_INBOX'&&action.data.content){
           const i={id:uid(),content:action.data.content,createdAt:td,processed:false};
           const upd=[i,...data.inbox];
