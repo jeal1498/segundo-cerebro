@@ -7,7 +7,7 @@ const T = {
   accent: '#00c896', accentHover: '#00e0a8',
   text: '#e2eaf4', muted: '#6b8299', dim: '#3a5068',
   green: '#00c896', red: '#ff5c5c', blue: '#4da6ff',
-  purple: '#a78bfa', orange: '#ff8c42',
+  purple: '#a78bfa', orange: '#ff8c42', yellow: '#ffd166', teal: '#00e0a8',
   userBubble: '#00c896', userText: '#000',
   areaColors: ['#4da6ff','#00c896','#ff8c42','#a78bfa','#ff5c5c','#00e0a8','#ffd166','#ff6b8a'],
 };
@@ -74,6 +74,10 @@ const Icon = ({ name, size = 18, color }) => {
     graduation: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color||'currentColor'} strokeWidth="1.8"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
     star: <svg width={size} height={size} viewBox="0 0 24 24" fill={color||'currentColor'} stroke={color||'currentColor'} strokeWidth="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
     starEmpty: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color||'currentColor'} strokeWidth="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+    people: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color||'currentColor'} strokeWidth="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+    health: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color||'currentColor'} strokeWidth="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+    money: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color||'currentColor'} strokeWidth="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+    rocket: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color||'currentColor'} strokeWidth="1.8"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>,
   };
   return <span style={{display:'inline-flex',alignItems:'center'}}>{icons[name]||null}</span>;
 };
@@ -276,6 +280,7 @@ const initData = () => ({
   sideProjects:[],
   spTasks:[],
   milestones:[],
+  spTimeLogs:[],
   journal:[],
   books:[],
   shopping:[{id:uid(),name:'Leche',qty:2,unit:'L',category:'Lácteos',done:false,createdAt:today()},{id:uid(),name:'Pan integral',qty:1,unit:'pza',category:'Panadería',done:false,createdAt:today()}],
@@ -527,35 +532,33 @@ const GlobalSearch = ({data,onNavigate,onClose}) => {
 
 
 // ===================== DASHBOARD =====================
-const Dashboard = ({data,isMobile,onNavigate}) => {
+const Dashboard = ({data,setData,isMobile,onNavigate}) => {
   const todayStr=today();
   const h=new Date().getHours();
   const greeting=h<12?'Buenos días 🌅':h<18?'Buenas tardes ☀️':'Buenas noches 🌙';
-  const pendingTasks=data.tasks.filter(t=>t.status!=='done').length;
-  const inboxUnread=data.inbox.filter(i=>!i.processed).length;
+
+  // ── Habits interactive ──
   const dailyHabits=data.habits.filter(hb=>!hb.frequency||hb.frequency==='daily');
+  const toggleHabit=(habitId)=>{
+    const updated=data.habits.map(hb=>{
+      if(hb.id!==habitId)return hb;
+      const has=hb.completions.includes(todayStr);
+      return {...hb,completions:has?hb.completions.filter(d=>d!==todayStr):[...hb.completions,todayStr]};
+    });
+    setData(d=>({...d,habits:updated}));save('habits',updated);
+  };
   const todayDoneHabits=dailyHabits.filter(hb=>hb.completions.includes(todayStr));
   const habitPct=dailyHabits.length?Math.round(todayDoneHabits.length/dailyHabits.length*100):0;
+  const HABIT_COLORS=['#4da6ff','#00c896','#ff8c42','#a78bfa','#ff5069','#ffd166'];
+  const habitColor=(hb,idx)=>hb.color||(HABIT_COLORS[idx%HABIT_COLORS.length]);
 
-  // Stats grid
-  const stats=[
-    {label:'Áreas',val:data.areas.length,icon:'grid',color:T.blue,view:'areas',hint:null},
-    {label:'Objetivos',val:data.objectives.filter(o=>o.status==='active').length,icon:'target',color:T.accent,view:'objectives',hint:'active'},
-    {label:'Tareas',val:pendingTasks,icon:'check',color:T.orange,view:'projects',hint:'pending'},
-    {label:'Inbox',val:inboxUnread,icon:'inbox',color:T.red,view:'inbox',hint:'unread'},
-    {label:'Hábitos hoy',val:`${todayDoneHabits.length}/${dailyHabits.length}`,icon:'habit',color:T.green,view:'habits',hint:'today'},
-    {label:'Notas',val:data.notes.length,icon:'note',color:T.purple,view:'notes',hint:null},
-  ];
-
-  // Top 3 urgent tasks sorted by due date
+  // ── Tasks interactive ──
   const urgentTasks=[...data.tasks.filter(t=>t.status!=='done')]
-    .sort((a,b)=>{
-      if(!a.dueDate&&!b.dueDate)return 0;
-      if(!a.dueDate)return 1;
-      if(!b.dueDate)return -1;
-      return a.dueDate.localeCompare(b.dueDate);
-    }).slice(0,3);
-
+    .sort((a,b)=>{if(!a.dueDate&&!b.dueDate)return 0;if(!a.dueDate)return 1;if(!b.dueDate)return -1;return a.dueDate.localeCompare(b.dueDate);}).slice(0,4);
+  const toggleTask=(taskId)=>{
+    const updated=data.tasks.map(t=>t.id===taskId?{...t,status:t.status==='done'?'todo':'done'}:t);
+    setData(d=>({...d,tasks:updated}));save('tasks',updated);
+  };
   const daysUntil=(d)=>{
     if(!d)return{label:'Sin fecha',color:T.dim};
     const diff=Math.ceil((new Date(d)-new Date(todayStr))/86400000);
@@ -566,188 +569,202 @@ const Dashboard = ({data,isMobile,onNavigate}) => {
   };
   const priorityColor=p=>p==='alta'?T.red:p==='media'?T.orange:T.accent;
 
-  // Balance current month
+  // ── Active objective ──
+  const activeObj=(data.objectives||[]).filter(o=>o.status==='active');
+  const topObj=activeObj[0]||null;
+  const getObjPct=(o)=>{
+    const ms=o.milestones||[];const relTasks=data.tasks.filter(t=>t.objectiveId===o.id);
+    if(ms.length){const done=ms.filter(m=>m.done).reduce((s,m)=>s+(m.weight||1),0);const total=ms.reduce((s,m)=>s+(m.weight||1),0);return Math.round((done/total)*100);}
+    if(relTasks.length){return Math.round(relTasks.filter(t=>t.status==='done').length/relTasks.length*100);}
+    return 0;
+  };
+  const topObjPct=topObj?getObjPct(topObj):0;
+  const topObjArea=topObj?data.areas.find(a=>a.id===topObj.areaId):null;
+
+  // ── Finance snapshot ──
   const curMonth=todayStr.slice(0,7);
   const curMonthTxs=(data.transactions||[]).filter(t=>t.date?.slice(0,7)===curMonth);
+  const prevMonthDate=new Date();prevMonthDate.setMonth(prevMonthDate.getMonth()-1);
+  const prevMonth=`${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth()+1).padStart(2,'0')}`;
+  const prevMonthTxs=(data.transactions||[]).filter(t=>t.date?.slice(0,7)===prevMonth);
   const totalIncome=curMonthTxs.filter(t=>t.type==='ingreso').reduce((s,t)=>s+(t.amount||0),0);
   const totalExpense=curMonthTxs.filter(t=>t.type==='egreso').reduce((s,t)=>s+(t.amount||0),0);
+  const prevExpense=prevMonthTxs.filter(t=>t.type==='egreso').reduce((s,t)=>s+(t.amount||0),0);
   const balance=totalIncome-totalExpense;
+  const expDelta=prevExpense>0?Math.round(((totalExpense-prevExpense)/prevExpense)*100):null;
+  const fmtCur=(n)=>`$${Math.abs(n).toLocaleString('es-MX',{maximumFractionDigits:0})}`;
 
-  // Weekly review stats (last 7 days)
-  const last7=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
-  const tasksDone7=data.tasks.filter(t=>t.status==='done'&&last7.includes(t.createdAt)).length;
-  const notesCap7=data.notes.filter(n=>last7.includes(n.createdAt)).length;
-  const habitDays7=data.habits.reduce((s,hb)=>s+last7.filter(d=>hb.completions.includes(d)).length,0);
-  const habitPoss7=dailyHabits.length*7;
-  const habitWeekPct=habitPoss7?Math.round(habitDays7/habitPoss7*100):0;
-  const inboxDone=data.inbox.filter(i=>i.processed).length;
-  const inboxTotal=data.inbox.length;
-  const inboxPct=inboxTotal?Math.round(inboxDone/inboxTotal*100):100;
+  // ── Upcoming birthdays ──
+  const bday7=(data.people||[]).filter(p=>{
+    if(!p.birthday)return false;
+    const[,m,dd]=p.birthday.split('-');
+    const thisYear=todayStr.slice(0,4);
+    const bdayThis=`${thisYear}-${m}-${dd}`;
+    const diff=Math.ceil((new Date(bdayThis)-new Date(todayStr))/86400000);
+    return diff>=0&&diff<7;
+  });
 
-  const recentNotes=[...data.notes].sort((a,b)=>b.createdAt>a.createdAt?1:-1).slice(0,3);
+  // ── Stats ──
+  const inboxUnread=data.inbox.filter(i=>!i.processed).length;
+  const pendingTasks=data.tasks.filter(t=>t.status!=='done').length;
+  const stats=[
+    {label:'Objetivos',val:activeObj.length,icon:'🎯',color:T.accent,view:'objectives'},
+    {label:'Tareas',val:pendingTasks,icon:'📋',color:T.orange,view:'projects'},
+    {label:'Inbox',val:inboxUnread,icon:'📥',color:T.red,view:'inbox'},
+    {label:'Hábitos',val:`${todayDoneHabits.length}/${dailyHabits.length}`,icon:'🔥',color:T.green,view:'habits'},
+  ];
 
   return (
     <div>
       <h2 style={{color:T.text,marginTop:0,fontSize:isMobile?20:24,fontWeight:700,marginBottom:2}}>{greeting}</h2>
-      <p style={{color:T.muted,marginBottom:20,fontSize:13}}>{new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}</p>
+      <p style={{color:T.muted,marginBottom:18,fontSize:13}}>{new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}</p>
 
-      {/* Stats grid */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
+      {/* Stats row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:14}}>
         {stats.map(s=>(
-          <Card key={s.label} onClick={onNavigate?()=>onNavigate(s.view,s.hint):undefined} style={{textAlign:'center',padding:isMobile?12:16}}>
-            <div style={{marginBottom:6,color:s.color}}><Icon name={s.icon} size={isMobile?18:22} color={s.color}/></div>
-            <div style={{fontSize:isMobile?22:28,fontWeight:700,color:T.text}}>{s.val}</div>
-            <div style={{fontSize:11,color:T.muted,marginTop:2}}>{s.label}</div>
+          <Card key={s.label} onClick={()=>onNavigate&&onNavigate(s.view,null)} style={{textAlign:'center',padding:isMobile?10:14,cursor:'pointer'}}>
+            <div style={{fontSize:isMobile?18:20}}>{s.icon}</div>
+            <div style={{fontSize:isMobile?18:24,fontWeight:800,color:s.color,lineHeight:1.1,marginTop:2}}>{s.val}</div>
+            <div style={{fontSize:10,color:T.muted,marginTop:2}}>{s.label}</div>
           </Card>
         ))}
       </div>
 
-      {/* Habit rings + Balance row */}
-      {(dailyHabits.length>0||(data.transactions||[]).length>0)&&(
-        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:12,marginBottom:16}}>
-
-          {/* Habit rings widget */}
+      <div style={{display:isMobile?'block':'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+        {/* LEFT COLUMN */}
+        <div>
+          {/* Habitos interactivos */}
           {dailyHabits.length>0&&(
-            <Card style={{padding:16}} onClick={()=>onNavigate&&onNavigate('habits',null)}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:13,color:T.text}}>Hábitos hoy</div>
-                  <div style={{fontSize:11,color:T.muted,marginTop:1}}>{todayDoneHabits.length}/{dailyHabits.length} completados</div>
-                </div>
-                <div style={{background:`${T.accent}18`,borderRadius:8,padding:'4px 10px'}}>
-                  <span style={{fontSize:12,fontWeight:700,color:T.accent}}>{habitPct}%</span>
-                </div>
+            <Card style={{marginBottom:14,padding:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                <div style={{fontWeight:700,fontSize:13,color:T.text}}>🔥 Hábitos de hoy</div>
+                <div style={{fontSize:13,fontWeight:700,color:habitPct>=80?T.accent:habitPct>=50?T.orange:T.muted}}>{habitPct}%</div>
               </div>
-              <div style={{display:'flex',gap:10,flexWrap:'wrap',justifyContent:'flex-start'}}>
-                {dailyHabits.slice(0,6).map(hb=>{
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {dailyHabits.slice(0,6).map((hb,idx)=>{
                   const done=hb.completions.includes(todayStr);
-                  const hColor=hb.color||T.accent;
+                  const hc=habitColor(hb,idx);
                   return (
-                    <Ring key={hb.id} pct={done?100:0} color={hColor} size={isMobile?48:54} stroke={4}
-                      label={hb.name.split(' ')[0]} sublabel={done?'✓':null}/>
+                    <div key={hb.id} onClick={()=>toggleHabit(hb.id)}
+                      style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:10,background:done?`${hc}12`:T.surface2,border:`1px solid ${done?hc:T.border}`,cursor:'pointer',transition:'all 0.15s'}}>
+                      <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${hc}`,background:done?hc:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}>
+                        {done&&<span style={{color:'#000',fontSize:11,fontWeight:900}}>&#10003;</span>}
+                      </div>
+                      <span style={{fontSize:13,color:done?T.muted:T.text,textDecoration:done?'line-through':'none',flex:1}}>{hb.name}</span>
+                    </div>
                   );
                 })}
               </div>
+              {dailyHabits.length>6&&<button onClick={()=>onNavigate&&onNavigate('habits',null)} style={{marginTop:8,width:'100%',padding:'5px',background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>Ver todos ({dailyHabits.length}) →</button>}
             </Card>
           )}
 
-          {/* Balance sparkline */}
-          <Card style={{padding:16}} onClick={()=>onNavigate&&onNavigate('areas',null)}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:13,color:T.text}}>Balance mensual</div>
-                <div style={{fontSize:isMobile?18:22,fontWeight:800,color:balance>=0?T.accent:T.red,marginTop:2}}>
-                  {balance>=0?'+':''}{(data.transactions||[]).length>0?`$${Math.abs(balance).toLocaleString()}`:'—'}
+          {/* Objetivo activo */}
+          {topObj&&(
+            <Card style={{marginBottom:14,padding:16,cursor:'pointer',borderLeft:`3px solid ${topObjArea?.color||T.accent}`}} onClick={()=>onNavigate&&onNavigate('objectives',null)}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:10,fontWeight:700,color:topObjArea?.color||T.accent,textTransform:'uppercase',letterSpacing:0.8,marginBottom:4}}>🎯 {topObjArea?`${topObjArea.icon} ${topObjArea.name}`:'Objetivo activo'}</div>
+                  <div style={{color:T.text,fontWeight:600,fontSize:14,lineHeight:1.3}}>{topObj.title}</div>
                 </div>
+                <div style={{fontSize:20,fontWeight:800,color:topObjArea?.color||T.accent,marginLeft:10,flexShrink:0}}>{topObjPct}%</div>
               </div>
-              <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                <div style={{display:'flex',gap:5,alignItems:'center'}}>
-                  <div style={{width:6,height:6,borderRadius:1,background:T.accent}}/>
-                  <span style={{fontSize:9,color:T.muted}}>Ingresos</span>
-                </div>
-                <div style={{display:'flex',gap:5,alignItems:'center'}}>
-                  <div style={{width:6,height:6,borderRadius:1,background:T.red}}/>
-                  <span style={{fontSize:9,color:T.muted}}>Egresos</span>
+              <div style={{height:6,background:T.border,borderRadius:3,overflow:'hidden'}}>
+                <div style={{height:'100%',width:`${topObjPct}%`,background:topObjArea?.color||T.accent,borderRadius:3,transition:'width 0.6s'}}/>
+              </div>
+              {activeObj.length>1&&<div style={{fontSize:11,color:T.dim,marginTop:6}}>+{activeObj.length-1} objetivos activos más</div>}
+            </Card>
+          )}
+
+          {/* Finance snapshot */}
+          <Card style={{marginBottom:isMobile?14:0,padding:16,cursor:'pointer'}} onClick={()=>onNavigate&&onNavigate('finance',null)}>
+            <div style={{fontWeight:700,fontSize:13,color:T.text,marginBottom:10}}>💰 Finanzas este mes</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
+              <div>
+                <div style={{fontSize:10,color:T.muted}}>Balance</div>
+                <div style={{fontSize:22,fontWeight:800,color:balance>=0?T.accent:T.red}}>{(data.transactions||[]).length>0?(balance>=0?'+':'')+fmtCur(balance):'—'}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:11,color:T.green,fontWeight:600}}>{fmtCur(totalIncome)} ingresos</div>
+                <div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end'}}>
+                  <div style={{fontSize:11,color:T.red,fontWeight:600}}>{fmtCur(totalExpense)} egresos</div>
+                  {expDelta!==null&&<span style={{fontSize:10,padding:'1px 5px',borderRadius:5,background:expDelta>0?`${T.red}18`:`${T.green}18`,color:expDelta>0?T.red:T.green,fontWeight:700}}>{expDelta>0?'↑':'↓'}{Math.abs(expDelta)}%</span>}
                 </div>
               </div>
             </div>
-            {(data.transactions||[]).length>0
-              ?<BalanceSparkline transactions={data.transactions}/>
-              :<div style={{color:T.dim,fontSize:12,textAlign:'center',padding:'12px 0'}}>Registra transacciones en Finanzas →</div>
-            }
+            {(data.transactions||[]).length===0&&<div style={{fontSize:12,color:T.dim,textAlign:'center',marginTop:8}}>Sin transacciones — Ir a Finanzas →</div>}
           </Card>
         </div>
-      )}
 
-      {/* Top 3 urgent tasks */}
-      <Card style={{marginBottom:16,padding:16}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>🎯 Tareas más urgentes</h3>
-          <button onClick={()=>onNavigate&&onNavigate('projects',null)}
-            style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>
-            Ver todas
-          </button>
-        </div>
-        {urgentTasks.length===0
-          ?<div style={{textAlign:'center',padding:'12px 0'}}>
-             <p style={{color:T.dim,fontSize:13,margin:'0 0 8px'}}>¡Sin tareas pendientes! 🎉</p>
-             <button onClick={()=>onNavigate&&onNavigate('projects',null)} style={{background:`${T.accent}18`,border:`1px solid ${T.accent}40`,borderRadius:8,padding:'6px 14px',cursor:'pointer',color:T.accent,fontSize:12,fontFamily:'inherit',fontWeight:600}}>+ Nueva tarea</button>
-           </div>
-          :urgentTasks.map((t,i)=>{
-            const area=data.areas.find(a=>a.id===t.projectId||a.id===t.areaId);
-            const due=daysUntil(t.dueDate);
-            return (
-              <div key={t.id} onClick={()=>onNavigate&&onNavigate('projects','pending')}
-                style={{display:'flex',alignItems:'center',gap:10,marginBottom:i<urgentTasks.length-1?8:0,
-                  padding:'10px 12px',background:T.surface2,borderRadius:10,cursor:'pointer',
-                  border:`1px solid ${T.border}`,borderLeft:`3px solid ${priorityColor(t.priority)}`,
-                  transition:'border-color 0.15s'}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.borderLeftColor=priorityColor(t.priority);}}>
-                <div style={{fontWeight:800,color:T.dim,fontSize:13,width:16,flexShrink:0}}>{i+1}</div>
-                <span style={{color:T.text,fontSize:13,flex:1,lineHeight:1.3}}>{t.title}</span>
-                <div style={{fontSize:11,fontWeight:700,color:due.color,background:`${due.color}15`,
-                  padding:'2px 8px',borderRadius:6,flexShrink:0,whiteSpace:'nowrap'}}>{due.label}</div>
-              </div>
-            );
-          })
-        }
-      </Card>
-
-      {/* Weekly review */}
-      <Card style={{marginBottom:16,padding:16}}>
-        <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:'0 0 12px'}}>📊 Revisión semanal</h3>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {[
-            {label:'Tareas cerradas',val:tasksDone7||'—',icon:'✅',color:T.accent},
-            {label:'Notas capturadas',val:notesCap7||'—',icon:'📝',color:T.purple},
-            {label:'Hábitos completados',val:`${habitWeekPct}%`,icon:'🔥',color:T.orange},
-            {label:'Inbox procesado',val:`${inboxPct}%`,icon:'📥',color:T.blue},
-          ].map(s=>(
-            <div key={s.label} style={{background:T.surface2,borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:10}}>
-              <span style={{fontSize:18}}>{s.icon}</span>
-              <div>
-                <div style={{fontSize:isMobile?15:18,fontWeight:800,color:s.color}}>{s.val}</div>
-                <div style={{fontSize:10,color:T.muted,marginTop:1}}>{s.label}</div>
-              </div>
+        {/* RIGHT COLUMN */}
+        <div>
+          {/* Tareas urgentes interactivas */}
+          <Card style={{marginBottom:14,padding:16}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:13,color:T.text}}>📋 Tareas urgentes</div>
+              <button onClick={()=>onNavigate&&onNavigate('projects',null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>Ver todas</button>
             </div>
-          ))}
-        </div>
-      </Card>
+            {urgentTasks.length===0
+              ?<div style={{textAlign:'center',padding:'12px 0',color:T.dim,fontSize:13}}>Sin tareas pendientes 🎉</div>
+              :urgentTasks.map(t=>{
+                const due=daysUntil(t.dueDate);
+                return (
+                  <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,padding:'8px 10px',background:T.surface2,borderRadius:10,border:`1px solid ${T.border}`,borderLeft:`3px solid ${priorityColor(t.priority)}`}}>
+                    <div onClick={e=>{e.stopPropagation();toggleTask(t.id);}}
+                      style={{width:20,height:20,borderRadius:6,border:`2px solid ${T.border}`,background:'transparent',cursor:'pointer',flexShrink:0}}/>
+                    <span onClick={()=>onNavigate&&onNavigate('projects','pending')} style={{color:T.text,fontSize:12,flex:1,lineHeight:1.3,cursor:'pointer'}}>{t.title}</span>
+                    <span style={{fontSize:11,fontWeight:700,color:due.color,flexShrink:0}}>{due.label}</span>
+                  </div>
+                );
+              })
+            }
+          </Card>
 
-      {/* Recent notes */}
-      <div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>Notas recientes</h3>
-          <button onClick={()=>onNavigate&&onNavigate('notes',null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>Ver todas</button>
+          {/* Cumpleaños proximos */}
+          {bday7.length>0&&(
+            <Card style={{marginBottom:14,padding:16,border:`1px solid ${T.purple}40`,background:`${T.purple}06`}}>
+              <div style={{fontWeight:700,fontSize:13,color:T.purple,marginBottom:10}}>🎂 Cumpleaños esta semana</div>
+              {bday7.slice(0,3).map(p=>{
+                const[,m,dd]=p.birthday.split('-');
+                const bdayThis=`${todayStr.slice(0,4)}-${m}-${dd}`;
+                const diff=Math.ceil((new Date(bdayThis)-new Date(todayStr))/86400000);
+                return (
+                  <div key={p.id} onClick={()=>onNavigate&&onNavigate('relaciones',null)}
+                    style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0',borderBottom:`1px solid ${T.border}`,cursor:'pointer'}}>
+                    <span style={{fontSize:20}}>{p.emoji||'👤'}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,color:T.text,fontWeight:600}}>{p.name}</div>
+                      <div style={{fontSize:11,color:T.muted}}>{p.relation||'Contacto'}</div>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,color:diff===0?T.red:T.purple,background:`${T.purple}18`,padding:'2px 8px',borderRadius:6}}>{diff===0?'Hoy!':diff===1?'Mañana':`en ${diff}d`}</span>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+
+          {/* Notas recientes */}
+          <Card style={{padding:16}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:13,color:T.text}}>📝 Notas recientes</div>
+              <button onClick={()=>onNavigate&&onNavigate('notes',null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>Ver todas</button>
+            </div>
+            {[...data.notes].sort((a,b)=>b.createdAt>a.createdAt?1:-1).slice(0,3).map(n=>{
+              const area=data.areas.find(a=>a.id===n.areaId);
+              return (
+                <div key={n.id} onClick={()=>onNavigate&&onNavigate('notes',n.id)}
+                  style={{marginBottom:8,padding:'10px 12px',background:T.surface2,borderRadius:10,borderLeft:`3px solid ${area?.color||T.accent}`,cursor:'pointer'}}>
+                  <div style={{color:T.text,fontSize:13,fontWeight:500,marginBottom:3}}>{n.title}</div>
+                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                    {area&&<span style={{fontSize:10,color:area.color}}>{area.icon} {area.name}</span>}
+                    <span style={{color:T.dim,fontSize:11}}>{fmt(n.createdAt)}</span>
+                  </div>
+                </div>
+              );
+            })}
+            {data.notes.length===0&&<div style={{color:T.dim,fontSize:12,textAlign:'center',padding:'12px 0'}}>Sin notas aún</div>}
+          </Card>
         </div>
-        {recentNotes.length===0
-          ?<div style={{textAlign:'center',padding:'16px 0'}}>
-             <p style={{color:T.dim,fontSize:13,margin:'0 0 8px'}}>Sin notas aún</p>
-             <button onClick={()=>onNavigate&&onNavigate('notes',null)} style={{background:`${T.purple}18`,border:`1px solid ${T.purple}40`,borderRadius:8,padding:'6px 14px',cursor:'pointer',color:T.purple,fontSize:12,fontFamily:'inherit',fontWeight:600}}>+ Nueva nota</button>
-           </div>
-          :recentNotes.map(n=>{
-            const area=data.areas.find(a=>a.id===n.areaId);
-            return (
-              <div key={n.id} onClick={()=>onNavigate&&onNavigate('notes',n.id)}
-                style={{marginBottom:8,padding:'12px 14px',background:T.surface,borderRadius:10,
-                  borderLeft:`3px solid ${area?.color||T.accent}`,cursor:'pointer',
-                  border:`1px solid ${T.border}`,borderLeft:`3px solid ${area?.color||T.accent}`,
-                  transition:'opacity 0.15s'}}
-                onMouseEnter={e=>e.currentTarget.style.opacity='0.8'}
-                onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                  <div style={{color:T.text,fontSize:13,fontWeight:500,flex:1,minWidth:0}}>{n.title}</div>
-                  {n.amount&&<span style={{color:T.green,fontSize:11,fontWeight:600,flexShrink:0,marginLeft:6}}>${n.amount}</span>}
-                </div>
-                <div style={{display:'flex',gap:6,marginTop:4,alignItems:'center'}}>
-                  {area&&<span style={{fontSize:10,color:area.color}}>{area.icon} {area.name}</span>}
-                  <span style={{color:T.dim,fontSize:11}}>{fmt(n.createdAt)}</span>
-                </div>
-              </div>
-            );
-          })
-        }
       </div>
     </div>
   );
@@ -976,7 +993,7 @@ const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
     if(!form.title.trim())return;
     const updated=[...data.objectives,{id:uid(),...form,milestones:[],checkins:[]}];
     setData(d=>({...d,objectives:updated}));save('objectives',updated);
-    setModal(false);setForm({title:'',areaId:areaFilter||'',deadline:'',status:'active'});
+    setModal(false);toast.success('Objetivo guardado');setForm({title:'',areaId:areaFilter||'',deadline:'',status:'active'});
   };
   const toggle=(id)=>{const u=data.objectives.map(o=>o.id===id?{...o,status:o.status==='active'?'done':'active'}:o);setData(d=>({...d,objectives:u}));save('objectives',u);};
   const del=(id)=>{const u=data.objectives.filter(o=>o.id!==id);setData(d=>({...d,objectives:u}));save('objectives',u);if(selected===id)setSelected(null);};
@@ -1640,6 +1657,7 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
   const [filterArea,setFilterArea]=useState('all');
   const [filterTag,setFilterTag]=useState('all');
   const [sortBy,setSortBy]=useState('date');
+  const [noteView,setNoteView]=useState('lista'); // 'lista' | 'tablero'
 
   useEffect(()=>{
     if(viewHint&&viewHint!=='null'){
@@ -1654,17 +1672,11 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
     const n={id:uid(),...form,tags:form.tags.split(',').map(t=>t.trim()).filter(Boolean),createdAt:today()};
     const updated=[n,...data.notes];
     setData(d=>({...d,notes:updated}));save('notes',updated);
-    setModal(false);setForm({title:'',content:'',tags:'',areaId:''});
+    setModal(false);toast.success('Nota guardada');setForm({title:'',content:'',tags:'',areaId:''});
     setSel(n);if(isMobile)setShowNote(true);
   };
-  const applyTemplate=(tpl)=>{
-    setForm(f=>({...f,content:tpl.content}));
-    setShowTemplates(false);setModal(true);
-  };
-  const startEdit=(n)=>{
-    setEditForm({title:n.title,content:n.content,tags:(n.tags||[]).join(', '),areaId:n.areaId||''});
-    setEditing(true);
-  };
+  const applyTemplate=(tpl)=>{setForm(f=>({...f,content:tpl.content}));setShowTemplates(false);setModal(true);};
+  const startEdit=(n)=>{setEditForm({title:n.title,content:n.content,tags:(n.tags||[]).join(', '),areaId:n.areaId||''});setEditing(true);};
   const saveEdit=()=>{
     if(!editForm.title.trim())return;
     const updated=data.notes.map(n=>n.id===sel.id?{...n,...editForm,tags:editForm.tags.split(',').map(t=>t.trim()).filter(Boolean)}:n);
@@ -1672,16 +1684,13 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
     setSel(updated.find(n=>n.id===sel.id));setEditing(false);
   };
   const del=(id)=>{
-    if(!window.confirm('¿Eliminar esta nota?'))return;
+    if(!window.confirm('Eliminar esta nota?'))return;
     const updated=data.notes.filter(n=>n.id!==id);
     setData(d=>({...d,notes:updated}));save('notes',updated);
     if(sel?.id===id){setSel(null);setShowNote(false);}
   };
 
-  // All unique tags
   const allTags=[...new Set(data.notes.flatMap(n=>n.tags||[]))];
-
-  // Filter + sort
   let filtered=data.notes.filter(n=>{
     const q=search.toLowerCase();
     const matchQ=!q||n.title.toLowerCase().includes(q)||n.content.toLowerCase().includes(q)||(n.tags||[]).some(t=>t.toLowerCase().includes(q));
@@ -1693,10 +1702,71 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
   if(sortBy==='title')filtered=[...filtered].sort((a,b)=>a.title.localeCompare(b.title));
   if(sortBy==='area')filtered=[...filtered].sort((a,b)=>(a.areaId||'').localeCompare(b.areaId||''));
 
+  const TEMPLATES=[
+    {name:'Diaria',icon:'📅',content:'## Hoy\n\n### Prioridades\n- \n- \n\n### Notas\n\n### Mañana\n- '},
+    {name:'Reunión',icon:'🤝',content:'## Reunión\n**Fecha:** \n**Participantes:** \n\n### Agenda\n- \n\n### Acuerdos\n- \n\n### Próximos pasos\n- '},
+    {name:'Libro',icon:'📚',content:'## \n**Autor:** \n**Rating:** ⭐⭐⭐⭐⭐\n\n### Ideas clave\n1. \n2. \n\n### Cita favorita\n> \n\n### Acción a tomar\n- '},
+    {name:'Idea',icon:'💡',content:'## Idea: \n\n**Problema que resuelve:** \n\n**Cómo funcionaría:** \n\n**Siguiente paso:** '},
+    {name:'Reflexión',icon:'🧘',content:'## Reflexión\n\n**¿Qué salió bien?**\n\n**¿Qué mejoraría?**\n\n**¿Qué aprendí?**\n\n**Intención para mañana:** '},
+  ];
+
+  const renderMd=(text)=>text
+    .replace(/^### (.+)$/gm,'<h4 style="color:#e2eaf4;margin:8px 0 4px;font-size:12px">$1</h4>')
+    .replace(/^## (.+)$/gm,'<h3 style="color:#e2eaf4;margin:10px 0 6px;font-size:14px">$1</h3>')
+    .replace(/^# (.+)$/gm,'<h2 style="color:#e2eaf4;margin:12px 0 8px;font-size:16px">$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/^> (.+)$/gm,'<blockquote style="border-left:3px solid #00c896;margin:6px 0;padding:4px 10px;color:#6b8299;font-style:italic">$1</blockquote>')
+    .replace(/^- (.+)$/gm,'<div style="display:flex;gap:6px;margin:2px 0"><span style="color:#00c896;flex-shrink:0">•</span><span>$1</span></div>')
+    .replace(/^\d+\. (.+)$/gm,'<div style="margin:2px 0">$1</div>')
+    .replace(/\n/g,'<br/>');
+
+  const NoteCard=({n,compact=false})=>{
+    const area=data.areas.find(a=>a.id===n.areaId);
+    return (
+      <div onClick={()=>{setSel(n);if(isMobile)setShowNote(true);}}
+        style={{padding:compact?'10px 12px':'12px 14px',background:T.surface,border:`1px solid ${sel?.id===n.id?T.accent:T.border}`,borderLeft:`3px solid ${area?.color||T.accent}`,borderRadius:10,cursor:'pointer',marginBottom:compact?6:8,transition:'border-color 0.15s'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
+          <div style={{color:T.text,fontSize:compact?12:13,fontWeight:500,flex:1,lineHeight:1.3}}>{n.title}</div>
+          {n.amount&&<span style={{color:T.green,fontSize:11,fontWeight:600,flexShrink:0}}>${n.amount}</span>}
+        </div>
+        <div style={{display:'flex',gap:5,marginTop:4,flexWrap:'wrap',alignItems:'center'}}>
+          {area&&<span style={{fontSize:10,color:area.color}}>{area.icon} {area.name}</span>}
+          {(n.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:10,color:T.purple,background:`${T.purple}15`,padding:'1px 6px',borderRadius:6}}>#{t}</span>)}
+          <span style={{fontSize:10,color:T.dim,marginLeft:'auto'}}>{fmt(n.createdAt)}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const TableroView=()=>{
+    const cols=[
+      {id:'none',label:'Sin área',color:T.accent,icon:'📝'},
+      ...data.areas.map(a=>({id:a.id,label:a.name,color:a.color,icon:a.icon})),
+    ];
+    return (
+      <div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:12,minHeight:200}}>
+        {cols.map(col=>{
+          const colNotes=filtered.filter(n=>col.id==='none'?!n.areaId||n.areaId==='':n.areaId===col.id);
+          if(colNotes.length===0&&col.id!=='none')return null;
+          return (
+            <div key={col.id} style={{minWidth:240,flex:'0 0 240px',background:T.surface2,borderRadius:12,padding:10,border:`1px solid ${T.border}`,maxHeight:'70vh',overflowY:'auto'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10,paddingBottom:8,borderBottom:`1px solid ${T.border}`}}>
+                <span style={{fontSize:14}}>{col.icon}</span>
+                <span style={{fontSize:12,fontWeight:700,color:col.color}}>{col.label}</span>
+                <span style={{marginLeft:'auto',fontSize:11,color:T.dim,background:T.border,borderRadius:10,padding:'1px 6px'}}>{colNotes.length}</span>
+              </div>
+              {colNotes.map(n=><NoteCard key={n.id} n={n} compact/>)}
+              {colNotes.length===0&&<div style={{color:T.dim,fontSize:12,textAlign:'center',padding:'20px 0'}}>Vacío</div>}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const NoteList=()=>(
     <div>
-      <Input value={search} onChange={setSearch} placeholder="🔍 Buscar..." style={{marginBottom:10,fontSize:14}}/>
-      {/* Filters row */}
+      <Input value={search} onChange={setSearch} placeholder="Buscar notas..." style={{marginBottom:10,fontSize:14}}/>
       <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>
         <select value={filterArea} onChange={e=>setFilterArea(e.target.value)}
           style={{flex:1,minWidth:100,background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'6px 10px',borderRadius:9,fontSize:12,outline:'none'}}>
@@ -1712,174 +1782,187 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
         )}
         <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
           style={{background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'6px 10px',borderRadius:9,fontSize:12,outline:'none'}}>
-          <option value="date">↓ Reciente</option>
+          <option value="date">Reciente</option>
           <option value="title">A-Z</option>
           <option value="area">Área</option>
         </select>
       </div>
-      {/* Actions */}
       <div style={{display:'flex',gap:8,marginBottom:14}}>
-        <button onClick={()=>setShowTemplates(true)}
-          style={{flex:1,padding:'7px',border:`1px solid ${T.border}`,borderRadius:9,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
-          📋 Plantilla
-        </button>
+        <button onClick={()=>setShowTemplates(true)} style={{flex:1,padding:'7px',border:`1px solid ${T.border}`,borderRadius:9,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>📋 Plantilla</button>
         <Btn onClick={()=>setModal(true)} size="sm" style={{flex:1,justifyContent:'center'}}><Icon name="plus" size={12}/>Nueva nota</Btn>
       </div>
-      {filtered.map(n=>{
-        const area=data.areas.find(a=>a.id===n.areaId);
-        return (
-          <div key={n.id} onClick={()=>{setSel(n);if(isMobile)setShowNote(true);}}
-            style={{padding:'12px 14px',borderRadius:10,cursor:'pointer',marginBottom:8,
-              background:sel?.id===n.id&&!isMobile?T.surface2:T.surface,
-              border:`1px solid ${sel?.id===n.id&&!isMobile?T.accent:T.border}`,
-              borderLeft:`3px solid ${area?.color||T.accent}`,
-              transition:'border-color 0.15s'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-              <div style={{color:T.text,fontSize:14,fontWeight:500,marginBottom:2,flex:1,minWidth:0}}>{n.title}</div>
-              {n.amount&&<span style={{color:T.green,fontSize:12,fontWeight:600,flexShrink:0,marginLeft:8}}>💰 ${n.amount}</span>}
-            </div>
-            <div style={{color:T.muted,fontSize:12,marginBottom:4}}>{n.content.replace(/[#*\-\[\]]/g,'').slice(0,55)}{n.content.length>55?'...':''}</div>
-            <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-              {area&&<span style={{fontSize:10,color:area.color,background:`${area.color}15`,padding:'1px 6px',borderRadius:4}}>{area.icon} {area.name}</span>}
-              <span style={{color:T.dim,fontSize:11}}>{fmt(n.createdAt)}</span>
-              {n.tags?.slice(0,2).map(t=><span key={t} style={{fontSize:10,color:T.accent,background:`${T.accent}15`,padding:'1px 6px',borderRadius:8}}>{t}</span>)}
-            </div>
-          </div>
-        );
-      })}
-      {!filtered.length&&<p style={{color:T.dim,fontSize:13,textAlign:'center',padding:'20px 0'}}>Sin notas</p>}
+      {filtered.length===0
+        ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
+           <div style={{fontSize:32,marginBottom:8}}>📝</div>
+           <div style={{fontSize:14,marginBottom:12}}>{data.notes.length===0?'Sin notas aún':'Sin resultados'}</div>
+           {data.notes.length===0&&<Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={12}/>Primera nota</Btn>}
+         </div>
+        :filtered.map(n=><NoteCard key={n.id} n={n}/>)
+      }
     </div>
   );
 
-  const NoteView=()=>(
-    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,overflow:'hidden'}}>
-      {/* Toolbar */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 16px',borderBottom:`1px solid ${T.border}`,background:T.surface2}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          {isMobile&&(
-            <button onClick={()=>{setShowNote(false);setEditing(false);}}
-              style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:13,padding:0,fontFamily:'inherit'}}>
-              <Icon name="back" size={16}/>
-            </button>
-          )}
-          {!editing&&(
-            <button onClick={()=>setMdPreview(!mdPreview)}
-              style={{padding:'4px 10px',borderRadius:7,border:`1px solid ${T.border}`,
-                background:mdPreview?`${T.accent}18`:'transparent',
-                color:mdPreview?T.accent:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
-              {mdPreview?'👁 Preview':'{ } Raw'}
-            </button>
-          )}
-        </div>
-        <div style={{display:'flex',gap:6,alignItems:'center'}}>
-          {!editing
-            ?<button onClick={()=>startEdit(sel)}
-               style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.muted,cursor:'pointer',display:'flex',padding:'4px 10px',fontSize:12,fontFamily:'inherit',gap:4,alignItems:'center'}}>✏️ Editar</button>
-            :<>
-              <Btn onClick={saveEdit} size="sm">Guardar</Btn>
-              <Btn variant="ghost" size="sm" onClick={()=>setEditing(false)}>Cancelar</Btn>
-            </>
-          }
-          {!editing&&<button onClick={()=>del(sel.id)} style={{background:'none',border:'none',color:T.red,cursor:'pointer',display:'flex',padding:4}}><Icon name="trash" size={16}/></button>}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div style={{padding:20}}>
+  const NoteDetail=()=>{
+    if(!sel)return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:300,color:T.dim,fontSize:14}}>Selecciona una nota</div>;
+    const area=data.areas.find(a=>a.id===sel.areaId);
+    return (
+      <div>
+        {isMobile&&<button onClick={()=>setShowNote(false)} style={{background:'none',border:'none',color:T.accent,cursor:'pointer',fontSize:13,fontFamily:'inherit',marginBottom:12,padding:0}}>← Volver</button>}
         {editing?(
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
             <Input value={editForm.title} onChange={v=>setEditForm(f=>({...f,title:v}))} placeholder="Título"/>
-            <div style={{position:'relative'}}>
-              <textarea value={editForm.content} onChange={e=>setEditForm(f=>({...f,content:e.target.value}))}
-                placeholder="Escribe en Markdown... **negrita**, ## encabezado, - lista, - [ ] tarea"
-                rows={8}
-                style={{width:'100%',background:T.bg,border:`1px solid ${T.border}`,color:T.text,
-                  padding:'10px 14px',borderRadius:10,fontSize:14,outline:'none',
-                  resize:'vertical',fontFamily:'monospace',boxSizing:'border-box',lineHeight:1.6}}/>
-            </div>
-            <Input value={editForm.tags} onChange={v=>setEditForm(f=>({...f,tags:v}))} placeholder="Tags (separados por coma)"/>
-            <Select value={editForm.areaId} onChange={v=>setEditForm(f=>({...f,areaId:v}))}>
+            <textarea value={editForm.content} onChange={e=>setEditForm(f=>({...f,content:e.target.value}))} rows={12}
+              style={{background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'10px 12px',borderRadius:10,fontSize:13,fontFamily:'inherit',outline:'none',resize:'vertical',lineHeight:1.6}}/>
+            <Input value={editForm.tags} onChange={v=>setEditForm(f=>({...f,tags:v}))} placeholder="tags, separados, por, comas"/>
+            <select value={editForm.areaId} onChange={e=>setEditForm(f=>({...f,areaId:e.target.value}))}
+              style={{background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'8px 12px',borderRadius:9,fontSize:13,outline:'none'}}>
               <option value="">Sin área</option>
               {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
-            </Select>
+            </select>
+            <div style={{display:'flex',gap:8}}>
+              <Btn onClick={saveEdit} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
+              <Btn variant="ghost" onClick={()=>setEditing(false)}>Cancelar</Btn>
+            </div>
           </div>
         ):(
-          <>
+          <div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
-              <h3 style={{margin:0,color:T.text,fontSize:18,fontWeight:700,flex:1}}>{sel?.title}</h3>
+              <div style={{flex:1,minWidth:0}}>
+                <h2 style={{color:T.text,fontSize:18,fontWeight:700,margin:'0 0 6px',lineHeight:1.3}}>{sel.title}</h2>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                  {area&&<span style={{fontSize:11,color:area.color}}>{area.icon} {area.name}</span>}
+                  <span style={{color:T.dim,fontSize:11}}>{fmt(sel.createdAt)}</span>
+                  {sel.amount&&<span style={{color:T.green,fontSize:12,fontWeight:600}}>${sel.amount}</span>}
+                </div>
+              </div>
+              <div style={{display:'flex',gap:6,marginLeft:10,flexShrink:0}}>
+                <button onClick={()=>setMdPreview(p=>!p)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'4px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>{mdPreview?'Raw':'Preview'}</button>
+                <button onClick={()=>startEdit(sel)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'4px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>✏️</button>
+                <button onClick={()=>del(sel.id)} style={{background:'none',border:'none',color:T.red,cursor:'pointer',padding:4}}><Icon name="trash" size={14}/></button>
+              </div>
             </div>
-            <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
-              {sel?.tags?.map(t=><Tag key={t} text={t}/>)}
-              {sel?.areaId&&(()=>{const a=data.areas.find(x=>x.id===sel.areaId);return a?<Tag text={`${a.icon} ${a.name}`} color={a.color}/>:null;})()}
-              {sel?.amount&&<Tag text={`💰 $${sel.amount} ${sel.currency||'MXN'}`} color={T.green}/>}
-              <span style={{color:T.dim,fontSize:12,alignSelf:'center'}}>{fmt(sel?.createdAt)}</span>
+            {(sel.tags||[]).length>0&&(
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:12}}>
+                {sel.tags.map(t=><span key={t} style={{fontSize:11,color:T.purple,background:`${T.purple}15`,padding:'2px 8px',borderRadius:8}}>#{t}</span>)}
+              </div>
+            )}
+            <div style={{background:T.surface2,borderRadius:10,padding:'14px 16px',minHeight:120,lineHeight:1.7,fontSize:13,color:T.text}}>
+              {mdPreview
+                ?<div dangerouslySetInnerHTML={{__html:renderMd(sel.content||'')}}/>
+                :<pre style={{margin:0,fontFamily:'inherit',whiteSpace:'pre-wrap',color:T.muted}}>{sel.content}</pre>
+              }
             </div>
-            {mdPreview
-              ?<div style={{fontSize:14,lineHeight:1.8,color:T.text}}
-                  dangerouslySetInnerHTML={{__html:renderMd(sel?.content||'')}}/>
-              :<pre style={{fontSize:13,color:T.muted,whiteSpace:'pre-wrap',fontFamily:'monospace',margin:0,lineHeight:1.6}}>{sel?.content}</pre>
-            }
-          </>
+          </div>
         )}
       </div>
-    </div>
-  );
+    );
+  };
 
-  const NoteModal=()=>modal?(
-    <Modal title="Nueva nota" onClose={()=>setModal(false)}>
-      <div style={{display:'flex',flexDirection:'column',gap:14}}>
-        <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Título"/>
-        <div>
-          <textarea value={form.content} onChange={e=>setForm(f=>({...f,content:e.target.value}))}
-            placeholder="Escribe en Markdown... **negrita**, ## encabezado, - lista, - [ ] tarea" rows={6}
-            style={{width:'100%',background:T.bg,border:`1px solid ${T.border}`,color:T.text,
-              padding:'10px 14px',borderRadius:10,fontSize:14,outline:'none',
-              resize:'vertical',fontFamily:'monospace',boxSizing:'border-box',lineHeight:1.6}}/>
-          <div style={{fontSize:11,color:T.dim,marginTop:4}}>Soporta Markdown: **negrita**, ## encabezado, - [ ] tarea</div>
-        </div>
-        <Input value={form.tags} onChange={v=>setForm(f=>({...f,tags:v}))} placeholder="Tags (separados por coma)"/>
-        <Select value={form.areaId} onChange={v=>setForm(f=>({...f,areaId:v}))}>
-          <option value="">Sin área</option>
-          {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
-        </Select>
-        <Btn onClick={saveNote} style={{width:'100%',justifyContent:'center'}}>Guardar nota</Btn>
+  if(isMobile){
+    if(showNote)return(
+      <div style={{padding:'0 2px'}}>
+        <NoteDetail/>
       </div>
-    </Modal>
-  ):null;
-
-  const TemplatesModal=()=>showTemplates?(
-    <Modal title="📋 Plantillas" onClose={()=>setShowTemplates(false)}>
-      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-        {NOTE_TEMPLATES.map(tpl=>(
-          <button key={tpl.id} onClick={()=>applyTemplate(tpl)}
-            style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',
-              borderRadius:12,border:`1px solid ${T.border}`,background:T.surface2,
-              cursor:'pointer',textAlign:'left',fontFamily:'inherit',width:'100%',transition:'all 0.15s'}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.background=`${T.accent}10`;}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.surface2;}}>
-            <span style={{fontSize:24}}>{tpl.icon}</span>
-            <span style={{color:T.text,fontSize:14,fontWeight:600}}>{tpl.name}</span>
-          </button>
-        ))}
-      </div>
-    </Modal>
-  ):null;
-
-  if(isMobile) return (
-    <div>
-      {!showNote&&<PageHeader title="Notas" isMobile={isMobile}/>}
-      {showNote&&sel?<NoteView/>:<NoteList/>}
-      <NoteModal/><TemplatesModal/>
-    </div>
-  );
-
-  return (
-    <div style={{display:'grid',gridTemplateColumns:'280px 1fr',gap:16,minHeight:400}}>
-      <NoteList/>
+    );
+    return (
       <div>
-        {sel?<NoteView/>:<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',color:T.dim,textAlign:'center'}}><Icon name="note" size={48}/><p style={{marginTop:8}}>Selecciona una nota</p></div>}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <h2 style={{color:T.text,margin:0,fontSize:20,fontWeight:700}}>Notas</h2>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>setNoteView(v=>v==='lista'?'tablero':'lista')} style={{padding:'6px 12px',borderRadius:9,border:`1px solid ${T.border}`,background:noteView==='tablero'?`${T.accent}18`:'transparent',color:noteView==='tablero'?T.accent:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>{noteView==='lista'?'Tablero':'Lista'}</button>
+          </div>
+        </div>
+        {noteView==='tablero'?<TableroView/>:<NoteList/>}
+        {showTemplates&&(
+          <Modal title="Plantillas" onClose={()=>setShowTemplates(false)}>
+            {TEMPLATES.map(tpl=>(
+              <div key={tpl.name} onClick={()=>applyTemplate(tpl)} style={{display:'flex',gap:12,padding:'12px 0',borderBottom:`1px solid ${T.border}`,cursor:'pointer'}}>
+                <span style={{fontSize:24}}>{tpl.icon}</span>
+                <div><div style={{color:T.text,fontWeight:600,fontSize:14}}>{tpl.name}</div><div style={{color:T.muted,fontSize:12,marginTop:2}}>Usar esta plantilla</div></div>
+              </div>
+            ))}
+          </Modal>
+        )}
+        {modal&&(
+          <Modal title="Nueva nota" onClose={()=>setModal(false)}>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Título de la nota"/>
+              <textarea value={form.content} onChange={e=>setForm(f=>({...f,content:e.target.value}))} rows={6} placeholder="Escribe aquí... (Markdown soportado)"
+                style={{background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'10px 12px',borderRadius:10,fontSize:13,fontFamily:'inherit',outline:'none',resize:'vertical',lineHeight:1.6}}/>
+              <Input value={form.tags} onChange={v=>setForm(f=>({...f,tags:v}))} placeholder="Tags: trabajo, ideas, personal"/>
+              <select value={form.areaId} onChange={e=>setForm(f=>({...f,areaId:e.target.value}))}
+                style={{background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'8px 12px',borderRadius:9,fontSize:13,outline:'none'}}>
+                <option value="">Sin área</option>
+                {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+              </select>
+              <Btn onClick={saveNote} style={{justifyContent:'center'}}>Guardar nota</Btn>
+            </div>
+          </Modal>
+        )}
       </div>
-      <NoteModal/><TemplatesModal/>
+    );
+  }
+
+  // Desktop: split panel
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+        <h2 style={{color:T.text,margin:0,fontSize:22,fontWeight:700}}>Notas <span style={{color:T.dim,fontSize:14,fontWeight:400}}>({data.notes.length})</span></h2>
+        <div style={{display:'flex',gap:8}}>
+          <div style={{display:'flex',gap:0,border:`1px solid ${T.border}`,borderRadius:9,overflow:'hidden'}}>
+            {['lista','tablero'].map(v=>(
+              <button key={v} onClick={()=>setNoteView(v)} style={{padding:'6px 14px',border:'none',background:noteView===v?`${T.accent}20`:'transparent',color:noteView===v?T.accent:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:noteView===v?700:400}}>
+                {v==='lista'?'Lista':'Tablero'}
+              </button>
+            ))}
+          </div>
+          <Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={13}/>Nueva</Btn>
+        </div>
+      </div>
+
+      {noteView==='tablero'?(
+        <TableroView/>
+      ):(
+        <div style={{display:'grid',gridTemplateColumns:'320px 1fr',gap:16,height:'calc(100vh - 140px)'}}>
+          <div style={{overflowY:'auto'}}>
+            <NoteList/>
+          </div>
+          <div style={{overflowY:'auto',background:T.surface,borderRadius:12,padding:'16px 20px',border:`1px solid ${T.border}`}}>
+            <NoteDetail/>
+          </div>
+        </div>
+      )}
+
+      {showTemplates&&(
+        <Modal title="Plantillas de notas" onClose={()=>setShowTemplates(false)}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {TEMPLATES.map(tpl=>(
+              <div key={tpl.name} onClick={()=>applyTemplate(tpl)} style={{display:'flex',gap:10,padding:'12px',background:T.surface2,borderRadius:10,border:`1px solid ${T.border}`,cursor:'pointer',transition:'border-color 0.15s'}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                <span style={{fontSize:24}}>{tpl.icon}</span>
+                <div><div style={{color:T.text,fontWeight:600,fontSize:13}}>{tpl.name}</div><div style={{color:T.muted,fontSize:11,marginTop:2}}>Usar plantilla</div></div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+      {modal&&(
+        <Modal title="Nueva nota" onClose={()=>setModal(false)}>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Título de la nota"/>
+            <textarea value={form.content} onChange={e=>setForm(f=>({...f,content:e.target.value}))} rows={8} placeholder="Escribe aquí... (Markdown soportado)"
+              style={{background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'10px 12px',borderRadius:10,fontSize:13,fontFamily:'inherit',outline:'none',resize:'vertical',lineHeight:1.6}}/>
+            <Input value={form.tags} onChange={v=>setForm(f=>({...f,tags:v}))} placeholder="Tags: trabajo, ideas, personal"/>
+            <select value={form.areaId} onChange={e=>setForm(f=>({...f,areaId:e.target.value}))}
+              style={{background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'8px 12px',borderRadius:9,fontSize:13,outline:'none'}}>
+              <option value="">Sin área</option>
+              {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+            </select>
+            <Btn onClick={saveNote} style={{justifyContent:'center'}}>Guardar nota</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
@@ -2360,91 +2443,295 @@ const GEMINI_MODEL='gemini-2.5-flash-lite';
 
 
 // ===================== SETTINGS =====================
-const Settings = ({apiKey,setApiKey,isMobile}) => {
+const Settings = ({apiKey,setApiKey,isMobile,data,setData}) => {
   const [val,setVal]=useState(apiKey);
   const [show,setShow]=useState(false);
   const [saved,setSaved]=useState(false);
+  const [sTab,setSTab]=useState('ia');
+  const [reviewStep,setReviewStep]=useState(0);
+  const [notifEnabled,setNotifEnabled]=useState(()=>localStorage.getItem('sb_notifs')==='true');
+  const [notifSettings,setNotifSettings]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem('sb_notif_cfg')||'{}');}catch{return {};}
+  });
 
   const handleSave=()=>{
     const k=val.trim();
     localStorage.setItem('sb_gemini_key',k);
-    setApiKey(k);
-    setSaved(true);
+    setApiKey(k);setSaved(true);
     setTimeout(()=>setSaved(false),2500);
+    toast.success('API Key guardada');
   };
-  const handleClear=()=>{setVal('');setApiKey('');localStorage.removeItem('sb_gemini_key');};
+  const handleClear=()=>{setVal('');setApiKey('');localStorage.removeItem('sb_gemini_key');toast.info('API Key eliminada');};
+
+  // ── BACKUP ──
+  const exportData=()=>{
+    if(!data) return;
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`segundo-cerebro-${today()}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success('Backup exportado','Guardado en tu carpeta de descargas');
+  };
+
+  const importData=(e)=>{
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      try{
+        const imported=JSON.parse(ev.target.result);
+        if(!imported||typeof imported!=='object') throw new Error('Formato inválido');
+        setData(d=>({...d,...imported}));
+        Object.entries(imported).forEach(([k,v])=>save(k,v));
+        toast.success('Datos importados correctamente','Todos los módulos actualizados');
+      } catch(err){
+        toast.error('Error al importar','El archivo no es un backup válido');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value='';
+  };
+
+  // ── WEEKLY REVIEW ──
+  const reviewSteps=[
+    {icon:'📥',title:'Inbox',q:'¿Quedó algo sin procesar?',key:'inbox',count:data?data.inbox.filter(i=>!i.processed).length:0},
+    {icon:'✅',title:'Tareas',q:'¿Completaste lo que planeabas?',key:'tasks',count:data?data.tasks.filter(t=>t.status!=='done').length:0},
+    {icon:'🎯',title:'Objetivos',q:'¿Avanzaste en tus objetivos activos?',key:'objectives',count:data?data.objectives.filter(o=>o.status==='active').length:0},
+    {icon:'🔥',title:'Hábitos',q:'¿Cómo fue tu constancia esta semana?',key:'habits',count:data?data.habits.length:0},
+    {icon:'🧠',title:'Psicke',q:'Genera un resumen de la semana con IA',key:'psicke',psicke:true},
+  ];
+
+  // ── NOTIFICATIONS ──
+  const requestNotifs=async()=>{
+    if(!('Notification' in window)){toast.error('Notificaciones no soportadas en este navegador');return;}
+    const perm=await Notification.requestPermission();
+    if(perm==='granted'){
+      setNotifEnabled(true);localStorage.setItem('sb_notifs','true');
+      toast.success('Notificaciones activadas');
+      new Notification('Segundo Cerebro',{body:'Las notificaciones están activas ✓'});
+    } else {
+      toast.warn('Notificaciones denegadas','Habilítalas en la configuración del navegador');
+    }
+  };
+  const toggleNotif=(key)=>{
+    const updated={...notifSettings,[key]:!notifSettings[key]};
+    setNotifSettings(updated);
+    localStorage.setItem('sb_notif_cfg',JSON.stringify(updated));
+  };
+
+  const NOTIF_OPTIONS=[
+    {key:'habits',label:'Hábitos pendientes',time:'20:00 cada día'},
+    {key:'meds',label:'Medicamentos',time:'Según horario configurado'},
+    {key:'weekly',label:'Revisión semanal',time:'Domingos a las 19:00'},
+    {key:'docs',label:'Documentos por vencer',time:'30, 7 y 1 día antes'},
+    {key:'bdays',label:'Cumpleaños',time:'Día del cumpleaños, 09:00'},
+  ];
+
+  const STABS=[{id:'ia',label:'🤖 IA'},{id:'backup',label:'💾 Backup'},{id:'revision',label:'📋 Revisión semanal'},{id:'notifs',label:'🔔 Notificaciones'}];
 
   return (
-    <div style={{maxWidth:480}}>
-      <PageHeader title="Configuración" subtitle="Ajustes del asistente IA" isMobile={isMobile}/>
-      <Card style={{marginBottom:16}}>
-        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
-          <div style={{width:40,height:40,background:`${T.accent}22`,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-            <Icon name="key" size={20} color={T.accent}/>
-          </div>
-          <div>
-            <div style={{color:T.text,fontWeight:600,fontSize:15}}>Google Gemini API Key</div>
-            <div style={{color:T.muted,fontSize:12,marginTop:2}}>Necesaria para el asistente IA</div>
-          </div>
-          <div style={{marginLeft:'auto',width:10,height:10,borderRadius:'50%',background:apiKey?T.green:T.red,flexShrink:0}}/>
-        </div>
+    <div style={{maxWidth:560,margin:'0 auto',padding:isMobile?'0 0 80px':'0 0 40px'}}>
+      <PageHeader title="Configuración" subtitle="Ajustes y herramientas del sistema" isMobile={isMobile}/>
 
-        <div style={{position:'relative',marginBottom:12}}>
-          <input
-            type={show?'text':'password'}
-            value={val}
-            onChange={e=>setVal(e.target.value)}
-            placeholder="AIza..."
-            style={{width:'100%',background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'10px 44px 10px 14px',borderRadius:10,fontSize:14,outline:'none',boxSizing:'border-box',fontFamily:'monospace'}}
-          />
-          <button onClick={()=>setShow(s=>!s)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
-            {show?'Ocultar':'Ver'}
+      {/* Sub-tabs */}
+      <div style={{display:'flex',gap:6,marginBottom:20,flexWrap:'wrap'}}>
+        {STABS.map(t=>(
+          <button key={t.id} onClick={()=>setSTab(t.id)}
+            style={{padding:'7px 16px',borderRadius:10,border:`1px solid ${sTab===t.id?T.accent:T.border}`,background:sTab===t.id?`${T.accent}18`:'transparent',color:sTab===t.id?T.accent:T.muted,cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>
+            {t.label}
           </button>
-        </div>
+        ))}
+      </div>
 
-        <div style={{display:'flex',gap:10}}>
-          <Btn onClick={handleSave} style={{flex:1,justifyContent:'center'}}>
-            {saved?<><Icon name="checkCircle" size={15}/>Guardada</>:<><Icon name="key" size={15}/>Guardar Key</>}
-          </Btn>
-          {apiKey&&<Btn variant="danger" onClick={handleClear} size="md" style={{flexShrink:0}}>Limpiar</Btn>}
-        </div>
-      </Card>
-
-      <Card>
-        <div style={{color:T.muted,fontSize:13,lineHeight:1.7}}>
-          <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:10}}>¿Cómo obtener la API Key?</div>
-          <ol style={{margin:0,paddingLeft:18,display:'flex',flexDirection:'column',gap:6}}>
-            <li>Ve a <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{color:T.blue}}>aistudio.google.com</a></li>
-            <li>Inicia sesión con tu cuenta de Google</li>
-            <li>Haz clic en "Create API Key"</li>
-            <li>Copia la clave y pégala arriba</li>
-          </ol>
-          <div style={{marginTop:12,padding:'10px 14px',background:`${T.green}12`,borderRadius:8,border:`1px solid ${T.green}30`,color:T.green,fontSize:12}}>
-            ✓ El plan gratuito de Gemini es suficiente para uso personal intensivo.
-          </div>
-        </div>
-      </Card>
-
-      <Card style={{marginTop:16}}>
-        <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:10}}>Acerca del Asistente</div>
-        <div style={{display:'flex',flexDirection:'column',gap:8}}>
-          {[
-            {icon:'brain',label:'Modelo',val:'Google gemini-2.5-flash-lite'},
-            {icon:'note',label:'Auto-guardado',val:'Notas + etiquetas'},
-            {icon:'mic',label:'Voz',val:'Web Speech API (español)'},
-            {icon:'image',label:'Imágenes',val:'OCR visual con Gemini'},
-          ].map(({icon,label,val})=>(
-            <div key={label} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${T.border}`}}>
-              <Icon name={icon} size={15} color={T.muted}/>
-              <span style={{color:T.muted,fontSize:13,flex:1}}>{label}</span>
-              <span style={{color:T.text,fontSize:13}}>{val}</span>
+      {/* ── IA ── */}
+      {sTab==='ia'&&(
+        <>
+          <Card style={{marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+              <div style={{width:40,height:40,background:`${T.accent}22`,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Icon name="key" size={20} color={T.accent}/>
+              </div>
+              <div>
+                <div style={{color:T.text,fontWeight:600,fontSize:15}}>Google Gemini API Key</div>
+                <div style={{color:T.muted,fontSize:12,marginTop:2}}>Necesaria para el asistente IA</div>
+              </div>
+              <div style={{marginLeft:'auto',width:10,height:10,borderRadius:'50%',background:apiKey?T.green:T.dim}}/>
             </div>
-          ))}
-        </div>
-      </Card>
+            <div style={{position:'relative',marginBottom:12}}>
+              <input type={show?'text':'password'} value={val} onChange={e=>setVal(e.target.value)}
+                placeholder="AIza..." style={{width:'100%',background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'10px 60px 10px 14px',borderRadius:10,fontSize:14,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+              <button onClick={()=>setShow(s=>!s)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>{show?'Ocultar':'Ver'}</button>
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <Btn onClick={handleSave} style={{flex:1,justifyContent:'center'}}>
+                {saved?<><Icon name="checkCircle" size={15}/>Guardada</>:<><Icon name="key" size={15}/>Guardar</>}
+              </Btn>
+              {apiKey&&<Btn variant="danger" onClick={handleClear} size="md" style={{flexShrink:0}}>Limpiar</Btn>}
+            </div>
+          </Card>
+          <Card>
+            <div style={{color:T.muted,fontSize:13,lineHeight:1.7}}>
+              <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:10}}>¿Cómo obtener la API Key?</div>
+              <ol style={{margin:0,paddingLeft:18,display:'flex',flexDirection:'column',gap:6}}>
+                <li>Ve a <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{color:T.accent}}>aistudio.google.com</a></li>
+                <li>Inicia sesión con tu cuenta de Google</li>
+                <li>Haz clic en "Create API Key"</li>
+                <li>Copia la clave y pégala arriba</li>
+              </ol>
+              <div style={{marginTop:12,padding:'10px 14px',background:`${T.green}12`,borderRadius:8,borderLeft:`3px solid ${T.green}`,fontSize:12}}>
+                ✓ El plan gratuito de Gemini es suficiente para uso personal intensivo.
+              </div>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* ── BACKUP ── */}
+      {sTab==='backup'&&(
+        <>
+          <Card style={{marginBottom:14}}>
+            <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:6}}>Exportar datos</div>
+            <div style={{color:T.muted,fontSize:12,marginBottom:14,lineHeight:1.6}}>Descarga todos tus datos como archivo JSON. Puedes restaurarlos en cualquier momento.</div>
+            {data&&(
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:16}}>
+                {[
+                  {label:'Notas',val:data.notes?.length||0,color:T.blue},
+                  {label:'Tareas',val:data.tasks?.length||0,color:T.accent},
+                  {label:'Hábitos',val:data.habits?.length||0,color:T.orange},
+                  {label:'Personas',val:data.people?.length||0,color:T.purple},
+                  {label:'Finanzas',val:data.transactions?.length||0,color:T.green},
+                  {label:'Objetivos',val:data.objectives?.length||0,color:T.red},
+                ].map(s=>(
+                  <div key={s.label} style={{background:T.surface2,borderRadius:8,padding:'8px 10px'}}>
+                    <div style={{fontSize:10,color:T.muted}}>{s.label}</div>
+                    <div style={{fontSize:16,fontWeight:800,color:s.color}}>{s.val}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={exportData} style={{width:'100%',padding:'12px',borderRadius:10,border:'none',background:T.accent,color:'#000',cursor:'pointer',fontSize:14,fontWeight:700,fontFamily:'inherit'}}>
+              ⬇️ Exportar todo como JSON
+            </button>
+          </Card>
+          <Card>
+            <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:6}}>Importar datos</div>
+            <div style={{color:T.muted,fontSize:12,marginBottom:14,lineHeight:1.6}}>Restaura desde un archivo JSON exportado anteriormente. Los datos actuales serán reemplazados.</div>
+            <label style={{display:'block',border:`2px dashed ${T.border}`,borderRadius:10,padding:'24px',textAlign:'center',cursor:'pointer',transition:'border-color 0.2s'}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+              <div style={{fontSize:30,marginBottom:8}}>📂</div>
+              <div style={{fontSize:13,color:T.muted}}>Arrastra tu archivo backup.json aquí</div>
+              <div style={{fontSize:11,color:T.dim,marginTop:4}}>o haz clic para seleccionar</div>
+              <input type="file" accept=".json" onChange={importData} style={{display:'none'}}/>
+            </label>
+          </Card>
+        </>
+      )}
+
+      {/* ── REVISIÓN SEMANAL ── */}
+      {sTab==='revision'&&(
+        <>
+          <div style={{background:`${T.accent}08`,border:`1px solid ${T.accent}30`,borderRadius:12,padding:'14px 16px',marginBottom:16}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.accent}}>📋 Revisión semanal</div>
+            </div>
+            <div style={{fontSize:12,color:T.muted}}>Revisa tu semana guiado paso a paso en 5 minutos.</div>
+          </div>
+
+          {/* Step progress */}
+          <div style={{display:'flex',gap:6,marginBottom:16,overflowX:'auto',paddingBottom:4}}>
+            {reviewSteps.map((s,i)=>(
+              <button key={i} onClick={()=>setReviewStep(i)} style={{
+                flexShrink:0,padding:'8px 14px',borderRadius:10,
+                border:`2px solid ${reviewStep===i?T.accent:reviewStep>i?T.green:T.border}`,
+                background:reviewStep===i?`${T.accent}15`:reviewStep>i?`${T.green}10`:'transparent',
+                color:reviewStep===i?T.accent:reviewStep>i?T.green:T.muted,
+                cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',
+                display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+              }}>
+                <span style={{fontSize:18}}>{s.icon}</span>
+                <span>{s.title}</span>
+                {reviewStep>i&&<span style={{fontSize:9,color:T.green}}>✓</span>}
+              </button>
+            ))}
+          </div>
+
+          <Card>
+            {!reviewSteps[reviewStep].psicke?(
+              <div>
+                <div style={{fontSize:24,marginBottom:10}}>{reviewSteps[reviewStep].icon}</div>
+                <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:6}}>{reviewSteps[reviewStep].title}</div>
+                <div style={{fontSize:13,color:T.muted,marginBottom:14}}>{reviewSteps[reviewStep].q}</div>
+                <div style={{display:'inline-block',background:`${T.accent}12`,border:`1px solid ${T.accent}30`,borderRadius:8,padding:'6px 14px',fontSize:12,color:T.accent,fontWeight:700,marginBottom:14}}>
+                  {reviewSteps[reviewStep].count} ítems
+                </div>
+                <textarea placeholder="Notas de esta sección..." rows={3} style={{
+                  width:'100%',background:T.surface2,border:`1px solid ${T.border}`,borderRadius:10,
+                  color:T.text,padding:'10px 12px',fontSize:12,outline:'none',resize:'none',
+                  fontFamily:'inherit',boxSizing:'border-box',display:'block',
+                }}/>
+                <div style={{display:'flex',gap:8,marginTop:12}}>
+                  <button onClick={()=>setReviewStep(Math.max(0,reviewStep-1))} style={{padding:'8px 14px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>← Atrás</button>
+                  <button onClick={()=>setReviewStep(Math.min(reviewSteps.length-1,reviewStep+1))} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:T.accent,color:'#000',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>Siguiente →</button>
+                </div>
+              </div>
+            ):(
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:36,marginBottom:10}}>🧠</div>
+                <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:8}}>Resumen con Psicke</div>
+                <div style={{fontSize:12,color:T.muted,lineHeight:1.7,marginBottom:16,textAlign:'left',background:T.surface2,borderRadius:10,padding:'12px 14px'}}>
+                  {data&&`Tienes ${data.inbox.filter(i=>!i.processed).length} ítems en inbox, ${data.tasks.filter(t=>t.status!=='done').length} tareas pendientes, ${data.objectives.filter(o=>o.status==='active').length} objetivos activos y ${data.habits.length} hábitos configurados. Abre Psicke para un resumen detallado con IA.`}
+                </div>
+                <div style={{display:'flex',gap:8,justifyContent:'center'}}>
+                  <button onClick={()=>setReviewStep(0)} style={{padding:'10px 20px',borderRadius:10,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Reiniciar</button>
+                  <button onClick={()=>toast.success('Revisión completada','¡Buen trabajo esta semana!')} style={{padding:'10px 24px',borderRadius:10,border:'none',background:T.accent,color:'#000',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>✅ Completar revisión</button>
+                </div>
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {/* ── NOTIFICACIONES ── */}
+      {sTab==='notifs'&&(
+        <>
+          <Card style={{marginBottom:14}}>
+            <div style={{color:T.text,fontWeight:600,fontSize:14,marginBottom:6}}>Notificaciones del navegador</div>
+            <div style={{color:T.muted,fontSize:12,marginBottom:14,lineHeight:1.6}}>Recibe recordatorios aunque la app esté cerrada o en segundo plano.</div>
+            {!notifEnabled
+              ?<button onClick={requestNotifs} style={{width:'100%',padding:'11px',borderRadius:10,border:`1px solid ${T.accent}`,background:`${T.accent}15`,color:T.accent,cursor:'pointer',fontSize:14,fontWeight:700,fontFamily:'inherit'}}>
+                 🔔 Activar notificaciones
+               </button>
+              :<div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:`${T.green}12`,border:`1px solid ${T.green}30`,borderRadius:10}}>
+                 <span style={{fontSize:18}}>✅</span>
+                 <div>
+                   <div style={{fontSize:13,fontWeight:600,color:T.green}}>Notificaciones activas</div>
+                   <div style={{fontSize:11,color:T.muted}}>Tu navegador enviará recordatorios</div>
+                 </div>
+               </div>
+            }
+          </Card>
+          {notifEnabled&&(
+            <Card>
+              {NOTIF_OPTIONS.map((opt,i)=>(
+                <div key={opt.key} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:i<NOTIF_OPTIONS.length-1?`1px solid ${T.border}`:'none'}}>
+                  <div>
+                    <div style={{fontSize:13,color:T.text,fontWeight:500}}>{opt.label}</div>
+                    <div style={{fontSize:11,color:T.dim,marginTop:2}}>{opt.time}</div>
+                  </div>
+                  <button onClick={()=>toggleNotif(opt.key)} style={{width:40,height:22,borderRadius:11,background:notifSettings[opt.key]!==false?T.accent:T.border,border:'none',cursor:'pointer',position:'relative',transition:'background 0.2s',flexShrink:0}}>
+                    <div style={{position:'absolute',top:3,left:notifSettings[opt.key]!==false?20:3,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left 0.2s'}}/>
+                  </button>
+                </div>
+              ))}
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 };
+
 
 // ===================== PSICKE — FLOATING BRAIN =====================
 const buildPsickePrompt=(data)=>{
@@ -3968,23 +4255,41 @@ const Education = ({data,setData,isMobile}) => {
   );
 };
 
-const NAV=[
-  {id:'dashboard',label:'Inicio',icon:'home'},
-  {id:'areas',label:'Áreas',icon:'grid'},
-  {id:'objectives',label:'Objetivos',icon:'target'},
-  {id:'projects',label:'Proyectos',icon:'folder'},
-  {id:'notes',label:'Notas',icon:'note'},
-  {id:'journal',label:'Journal',icon:'journal'},
-  {id:'shopping',label:'Compras',icon:'cart'},
-  {id:'education',label:'Educación',icon:'graduation'},
-  {id:'inbox',label:'Inbox',icon:'inbox'},
-  {id:'habits',label:'Hábitos',icon:'habit'},
-  {id:'settings',label:'Config',icon:'cog'},
+const NAV_SECTIONS=[
+  {label:'VIDA',items:[
+    {id:'dashboard',label:'Inicio',icon:'home'},
+    {id:'areas',label:'Áreas',icon:'grid'},
+    {id:'objectives',label:'Objetivos',icon:'target'},
+    {id:'relaciones',label:'Relaciones',icon:'people'},
+    {id:'health',label:'Salud',icon:'health'},
+    {id:'finance',label:'Finanzas',icon:'money'},
+  ]},
+  {label:'TRABAJO',items:[
+    {id:'projects',label:'Proyectos',icon:'folder'},
+    {id:'notes',label:'Notas',icon:'note'},
+    {id:'sideprojects',label:'Side Projects',icon:'rocket'},
+    {id:'education',label:'Educación',icon:'graduation'},
+    {id:'desarrollo',label:'Desarrollo',icon:'brain'},
+  ]},
+  {label:'CAPTURA',items:[
+    {id:'inbox',label:'Inbox',icon:'inbox'},
+    {id:'habits',label:'Hábitos',icon:'habit'},
+    {id:'journal',label:'Journal',icon:'journal'},
+    {id:'shopping',label:'Compras',icon:'cart'},
+    {id:'books',label:'Libros',icon:'book'},
+    {id:'hogar',label:'Hogar',icon:'home'},
+  ]},
+  {label:'SISTEMA',items:[
+    {id:'settings',label:'Config',icon:'cog'},
+  ]},
 ];
+const NAV=NAV_SECTIONS.flatMap(s=>s.items);
 const MOBILE_NAV=[
   {id:'dashboard',label:'Inicio',icon:'home'},
   {id:'__psicke__',label:'Psicke',icon:'brain'},
-  {id:'areas',label:'Áreas',icon:'grid'},
+  {id:'notes',label:'Notas',icon:'note'},
+  {id:'projects',label:'Trabajo',icon:'folder'},
+  {id:'habits',label:'Hábitos',icon:'habit'},
 ];
 const MORE_NAV=NAV.slice(5);
 
@@ -4076,18 +4381,20 @@ const SideProjects = ({data,setData,isMobile,onBack}) => {
   const [modalProj,setModalProj] = useState(false);
   const [modalTask,setModalTask] = useState(false);
   const [modalMile,setModalMile] = useState(false);
+  const [modalTime,setModalTime] = useState(false);
   const [selProj,setSelProj]     = useState(null);
   const [editingProj,setEditingProj] = useState(null);
   const [projFilter,setProjFilter]   = useState('all');
-  const [projForm,setProjForm]   = useState({name:'',description:'',status:'idea',stack:'',url:'',startDate:today(),color:T.areaColors[0]});
+  const [projForm,setProjForm]   = useState({name:'',description:'',status:'idea',stack:'',url:'',repoUrl:'',platform:'',revenue:0,costs:0,startDate:today(),color:''});
   const [taskForm,setTaskForm]   = useState({projectId:'',title:'',priority:'media',dueDate:'',done:false});
   const [mileForm,setMileForm]   = useState({projectId:'',title:'',date:today(),notes:''});
+  const [timeForm,setTimeForm]   = useState({projectId:'',hours:'',note:'',date:today()});
 
   const sideProjects = data.sideProjects||[];
   const spTasks      = data.spTasks||[];
   const milestones   = data.milestones||[];
+  const timeLogs     = data.spTimeLogs||[];
 
-  // ── status config ──
   const STATUSES=[
     {id:'idea',     label:'Idea',       color:T.muted,   emoji:'💡'},
     {id:'progress', label:'En progreso',color:T.accent,  emoji:'⚡'},
@@ -4097,212 +4404,254 @@ const SideProjects = ({data,setData,isMobile,onBack}) => {
   ];
   const statusInfo=(id)=>STATUSES.find(s=>s.id===id)||STATUSES[0];
 
-  // ── summary ──
   const activeProjs   = sideProjects.filter(p=>p.status==='progress');
   const launchedProjs = sideProjects.filter(p=>p.status==='launched');
   const pendingTasks  = spTasks.filter(t=>!t.done);
   const todayTasks    = pendingTasks.filter(t=>t.dueDate===today());
   const lastMile      = [...milestones].sort((a,b)=>b.date.localeCompare(a.date))[0];
 
-  const fmtDate=(d)=>{ try{ return new Date(d+'T12:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}); }catch{return d||'—';} };
+  const fmtDate=(d)=>{ try{ return new Date(d+'T12:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short'}); } catch{ return d; } };
   const priorityColor=(p)=>p==='alta'?T.red:p==='media'?T.orange:T.green;
 
+  const COLORS=[T.areaColors[0],T.areaColors[1],T.areaColors[2],T.areaColors[3],T.areaColors[4],T.areaColors[5],T.areaColors[6]];
+
   // ── PROJECT actions ──
-  const COLORS=[T.areaColors[0],T.areaColors[1],T.areaColors[2],T.areaColors[3],T.areaColors[4],T.areaColors[5],T.areaColors[6],T.areaColors[7]];
   const saveProj=()=>{
     if(!projForm.name.trim()) return;
     const p={id:editingProj?.id||uid(),...projForm,createdAt:editingProj?.createdAt||today()};
     const upd=editingProj?sideProjects.map(x=>x.id===p.id?p:x):[p,...sideProjects];
     setData(d=>({...d,sideProjects:upd})); save('sideProjects',upd);
     setModalProj(false); setEditingProj(null); setSelProj(p);
-    setProjForm({name:'',description:'',status:'idea',stack:'',url:'',startDate:today(),color:T.areaColors[0]});
+    setProjForm({name:'',description:'',status:'idea',stack:'',url:'',repoUrl:'',platform:'',revenue:0,costs:0,startDate:today(),color:''});
+    toast.success(editingProj?'Proyecto actualizado':'Proyecto creado');
   };
-  const openEditProj=(p)=>{ setProjForm({name:p.name,description:p.description||'',status:p.status,stack:p.stack||'',url:p.url||'',startDate:p.startDate||today(),color:p.color||T.areaColors[0]}); setEditingProj(p); setModalProj(true); };
+  const openEditProj=(p)=>{ setProjForm({name:p.name,description:p.description||'',status:p.status,stack:p.stack||'',url:p.url||'',repoUrl:p.repoUrl||'',platform:p.platform||'',revenue:p.revenue||0,costs:p.costs||0,startDate:p.startDate||today(),color:p.color||''}); setEditingProj(p); setModalProj(true); };
   const delProj=(id)=>{
     if(!window.confirm('¿Eliminar este proyecto?')) return;
     const upd=sideProjects.filter(p=>p.id!==id); setData(d=>({...d,sideProjects:upd})); save('sideProjects',upd);
     if(selProj?.id===id) setSelProj(null);
+    toast.warn('Proyecto eliminado');
   };
   const updateStatus=(id,status)=>{
     const upd=sideProjects.map(p=>p.id===id?{...p,status}:p);
     setData(d=>({...d,sideProjects:upd})); save('sideProjects',upd);
     setSelProj(p=>p?.id===id?{...p,status}:p);
+    toast.success('Estado actualizado');
   };
 
   // ── TASK actions ──
   const saveTask=()=>{
-    if(!taskForm.title.trim()||!taskForm.projectId) return;
-    const t={id:uid(),...taskForm,done:false,createdAt:today()};
-    const upd=[t,...spTasks]; setData(d=>({...d,spTasks:upd})); save('spTasks',upd);
+    if(!taskForm.title.trim()) return;
+    const t={id:uid(),...taskForm,createdAt:today()};
+    const upd=[...spTasks,t]; setData(d=>({...d,spTasks:upd})); save('spTasks',upd);
     setModalTask(false); setTaskForm({projectId:selProj?.id||'',title:'',priority:'media',dueDate:'',done:false});
+    toast.success('Tarea agregada');
   };
   const toggleTask=(id)=>{
     const upd=spTasks.map(t=>t.id===id?{...t,done:!t.done}:t);
     setData(d=>({...d,spTasks:upd})); save('spTasks',upd);
   };
-  const delTask=(id)=>{ const upd=spTasks.filter(t=>t.id!==id); setData(d=>({...d,spTasks:upd})); save('spTasks',upd); };
+  const delTask=(id)=>{
+    const upd=spTasks.filter(t=>t.id!==id); setData(d=>({...d,spTasks:upd})); save('spTasks',upd);
+  };
 
   // ── MILESTONE actions ──
   const saveMile=()=>{
-    if(!mileForm.title.trim()||!mileForm.projectId) return;
-    const m={id:uid(),...mileForm,createdAt:today()};
-    const upd=[m,...milestones]; setData(d=>({...d,milestones:upd})); save('milestones',upd);
+    if(!mileForm.title.trim()) return;
+    const m={id:uid(),...mileForm,done:false}; const upd=[...milestones,m];
+    setData(d=>({...d,milestones:upd})); save('milestones',upd);
     setModalMile(false); setMileForm({projectId:selProj?.id||'',title:'',date:today(),notes:''});
+    toast.success('Hito registrado');
   };
-  const delMile=(id)=>{ const upd=milestones.filter(m=>m.id!==id); setData(d=>({...d,milestones:upd})); save('milestones',upd); };
+  const toggleMile=(id)=>{
+    const upd=milestones.map(m=>m.id===id?{...m,done:!m.done}:m);
+    setData(d=>({...d,milestones:upd})); save('milestones',upd);
+  };
+  const delMile=(id)=>{
+    const upd=milestones.filter(m=>m.id!==id); setData(d=>({...d,milestones:upd})); save('milestones',upd);
+  };
 
-  const projName=(id)=>sideProjects.find(p=>p.id===id)?.name||'Sin proyecto';
+  // ── TIME LOG actions ──
+  const saveTimeLog=()=>{
+    if(!timeForm.hours||!timeForm.projectId) return;
+    const log={id:uid(),...timeForm,hours:parseFloat(timeForm.hours)||0};
+    const upd=[log,...timeLogs]; setData(d=>({...d,spTimeLogs:upd})); save('spTimeLogs',upd);
+    setModalTime(false); setTimeForm({projectId:selProj?.id||'',hours:'',note:'',date:today()});
+    toast.success(`${timeForm.hours}h registradas`);
+  };
+  const delTimeLog=(id)=>{
+    const upd=timeLogs.filter(t=>t.id!==id); setData(d=>({...d,spTimeLogs:upd})); save('spTimeLogs',upd);
+  };
 
-  const visibleProjs = projFilter==='all' ? sideProjects : sideProjects.filter(p=>p.status===projFilter);
+  // ── COMPUTED ──
+  const projHours=(projId)=>timeLogs.filter(t=>t.projectId===projId).reduce((s,t)=>s+(t.hours||0),0);
+  const thisWeekHours=(projId)=>{
+    const wkAgo=new Date(); wkAgo.setDate(wkAgo.getDate()-7);
+    const wkStr=wkAgo.toISOString().slice(0,10);
+    return timeLogs.filter(t=>t.projectId===projId&&t.date>=wkStr).reduce((s,t)=>s+(t.hours||0),0);
+  };
+  const projMilestones=(projId)=>milestones.filter(m=>m.projectId===projId).sort((a,b)=>a.date.localeCompare(b.date));
+  const milestonePct=(projId)=>{
+    const ms=projMilestones(projId); if(!ms.length) return null;
+    return Math.round(ms.filter(m=>m.done).length/ms.length*100);
+  };
+
+  // ── FILTERED PROJECTS ──
+  const filteredProjs = projFilter==='all' ? sideProjects : sideProjects.filter(p=>p.status===projFilter);
 
   return (
-    <div>
-      <PageHeader isMobile={isMobile} title="🚀 Side Projects" onBack={onBack}
-        subtitle="Proyectos personales, experimentos y lanzamientos"
-        action={
-          <div style={{display:'flex',gap:8}}>
-            {tab==='proyectos'&&<Btn size="sm" onClick={()=>{setEditingProj(null);setProjForm({name:'',description:'',status:'idea',stack:'',url:'',startDate:today(),color:T.areaColors[0]});setModalProj(true);}}><Icon name="plus" size={14}/>Proyecto</Btn>}
-            {tab==='tareas'   &&<Btn size="sm" onClick={()=>{setTaskForm({projectId:selProj?.id||'',title:'',priority:'media',dueDate:'',done:false});setModalTask(true);}}><Icon name="plus" size={14}/>Tarea</Btn>}
-            {tab==='hitos'    &&<Btn size="sm" onClick={()=>{setMileForm({projectId:selProj?.id||'',title:'',date:today(),notes:''});setModalMile(true);}}><Icon name="plus" size={14}/>Hito</Btn>}
-          </div>
-        }
-      />
+    <div style={{maxWidth:800,margin:'0 auto',padding:isMobile?'0 0 80px':'0 0 40px'}}>
+      {/* Header */}
+      <div style={{display:'flex',alignItems:'center',gap:12,padding:'16px 20px',borderBottom:`1px solid ${T.border}`}}>
+        {isMobile&&<button onClick={onBack} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',padding:4}}><Icon name="chevron-left" size={20}/></button>}
+        <div style={{flex:1}}>
+          <div style={{fontSize:18,fontWeight:700,color:T.text,letterSpacing:-0.5}}>🚀 Side Projects</div>
+          <div style={{fontSize:12,color:T.muted,marginTop:2}}>{sideProjects.length} proyectos · {pendingTasks.length} tareas pendientes</div>
+        </div>
+        <Btn size="sm" onClick={()=>{setEditingProj(null);setProjForm({name:'',description:'',status:'idea',stack:'',url:'',repoUrl:'',platform:'',revenue:0,costs:0,startDate:today(),color:''});setModalProj(true);}}><Icon name="plus" size={13}/>Proyecto</Btn>
+      </div>
 
-      {/* ── Summary cards ── */}
-      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:10,marginBottom:20}}>
+      {/* Summary cards */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,padding:'16px 20px'}}>
         {[
-          {label:'En progreso',  val:activeProjs.length,   color:T.accent, icon:'⚡'},
-          {label:'Tareas hoy',   val:todayTasks.length,    color:todayTasks.length>0?T.orange:T.muted, icon:'✅'},
-          {label:'Lanzados',     val:launchedProjs.length, color:T.green,  icon:'🚀'},
-          {label:'Último hito',  val:lastMile?lastMile.title.slice(0,12)+(lastMile.title.length>12?'…':''):'—', color:T.purple, icon:'🏆'},
+          {label:'Activos',val:activeProjs.length,color:T.accent,icon:'⚡'},
+          {label:'Lanzados',val:launchedProjs.length,color:T.green,icon:'🚀'},
+          {label:'Pendientes',val:pendingTasks.length,color:T.orange,icon:'📋'},
+          {label:'Hoy',val:todayTasks.length,color:T.red,icon:'🔥'},
         ].map(s=>(
-          <Card key={s.label} style={{textAlign:'center',padding:14}}>
-            <div style={{fontSize:18,marginBottom:4}}>{s.icon}</div>
-            <div style={{fontSize:isMobile?15:18,fontWeight:700,color:s.color,lineHeight:1.2}}>{s.val}</div>
+          <Card key={s.label} style={{textAlign:'center',padding:12}}>
+            <div style={{fontSize:16,marginBottom:4}}>{s.icon}</div>
+            <div style={{fontSize:isMobile?20:24,fontWeight:700,color:s.color}}>{s.val}</div>
             <div style={{fontSize:11,color:T.muted,marginTop:2}}>{s.label}</div>
           </Card>
         ))}
       </div>
 
-      {/* ── Tabs ── */}
-      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
-        {[{id:'proyectos',label:'🗂️ Proyectos'},{id:'tareas',label:'✅ Tareas'},{id:'hitos',label:'🏆 Hitos'}].map(t=>(
+      {/* Tabs */}
+      <div style={{display:'flex',gap:8,padding:'0 20px 16px',flexWrap:'wrap'}}>
+        {[{id:'proyectos',label:'🗂️ Proyectos'},{id:'tareas',label:'✅ Tareas'},{id:'hitos',label:'🏆 Hitos'},{id:'tiempo',label:'⏱️ Tiempo'}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:'7px 16px',borderRadius:10,border:`1px solid ${tab===t.id?T.accent:T.border}`,background:tab===t.id?`${T.accent}18`:'transparent',color:tab===t.id?T.accent:T.muted,cursor:'pointer',fontSize:13,fontWeight:tab===t.id?600:400,fontFamily:'inherit'}}>
+            style={{padding:'7px 16px',borderRadius:10,border:`1px solid ${tab===t.id?T.accent:T.border}`,background:tab===t.id?`${T.accent}18`:'transparent',color:tab===t.id?T.accent:T.muted,cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>
             {t.label}
           </button>
         ))}
       </div>
 
+      <div style={{padding:'0 20px'}}>
+
       {/* ══════════ PROYECTOS ══════════ */}
       {tab==='proyectos'&&(
         <div>
           {/* Status filter */}
-          {sideProjects.length>0&&(
-            <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-              <button onClick={()=>setProjFilter('all')}
-                style={{padding:'5px 12px',borderRadius:8,border:`1px solid ${projFilter==='all'?T.accent:T.border}`,background:projFilter==='all'?`${T.accent}18`:'transparent',color:projFilter==='all'?T.accent:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
-                Todos ({sideProjects.length})
+          <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
+            {[{id:'all',label:'Todos'},...STATUSES].map(s=>(
+              <button key={s.id} onClick={()=>setProjFilter(s.id)}
+                style={{padding:'4px 12px',borderRadius:8,border:`1px solid ${projFilter===s.id?T.accent:T.border}`,background:projFilter===s.id?`${T.accent}18`:'transparent',color:projFilter===s.id?T.accent:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+                {s.emoji||''} {s.label}
               </button>
-              {STATUSES.filter(s=>sideProjects.some(p=>p.status===s.id)).map(s=>(
-                <button key={s.id} onClick={()=>setProjFilter(projFilter===s.id?'all':s.id)}
-                  style={{padding:'5px 12px',borderRadius:8,border:`1px solid ${projFilter===s.id?s.color:T.border}`,background:projFilter===s.id?`${s.color}18`:'transparent',color:projFilter===s.id?s.color:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
-                  {s.emoji} {s.label}
-                </button>
-              ))}
-            </div>
-          )}
+            ))}
+          </div>
 
-          {/* Selected project detail */}
-          {selProj&&(()=>{
-            const st=statusInfo(selProj.status);
-            const projTasksPending=spTasks.filter(t=>t.projectId===selProj.id&&!t.done);
-            const projMiles=[...milestones].filter(m=>m.projectId===selProj.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
-            return (
-              <Card style={{marginBottom:16,borderLeft:`3px solid ${selProj.color||T.accent}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,marginBottom:12}}>
-                  <div style={{flex:1}}>
-                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                      <span style={{color:T.text,fontWeight:700,fontSize:16}}>{selProj.name}</span>
-                      <span style={{fontSize:12,color:st.color,background:`${st.color}18`,padding:'3px 10px',borderRadius:8,fontWeight:600}}>{st.emoji} {st.label}</span>
-                    </div>
-                    {selProj.description&&<div style={{color:T.muted,fontSize:13,marginTop:6,lineHeight:1.5}}>{selProj.description}</div>}
-                    <div style={{display:'flex',gap:12,marginTop:8,flexWrap:'wrap'}}>
-                      {selProj.stack&&<span style={{fontSize:12,color:T.muted}}>🛠 {selProj.stack}</span>}
-                      {selProj.startDate&&<span style={{fontSize:12,color:T.muted}}>📅 {fmtDate(selProj.startDate)}</span>}
-                      {selProj.url&&<a href={selProj.url} target="_blank" rel="noreferrer" style={{fontSize:12,color:T.blue,textDecoration:'none'}}>🔗 {selProj.url}</a>}
-                    </div>
-                  </div>
-                  <div style={{display:'flex',gap:6,flexShrink:0}}>
-                    <button onClick={()=>openEditProj(selProj)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'4px 10px',cursor:'pointer',color:T.muted,fontSize:12,fontFamily:'inherit'}}>✏️</button>
-                    <button onClick={()=>delProj(selProj.id)} style={{background:'none',border:'none',color:T.red,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={15}/></button>
-                  </div>
-                </div>
-                {/* quick status change */}
-                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:projTasksPending.length>0||projMiles.length>0?12:0}}>
-                  {STATUSES.filter(s=>s.id!==selProj.status).map(s=>(
-                    <button key={s.id} onClick={()=>updateStatus(selProj.id,s.id)}
-                      style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${s.color}30`,background:`${s.color}12`,color:s.color,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>
-                      {s.emoji} {s.label}
-                    </button>
-                  ))}
-                </div>
-                {projTasksPending.length>0&&(
-                  <div style={{marginBottom:projMiles.length>0?10:0}}>
-                    <div style={{fontSize:11,fontWeight:600,color:T.accent,marginBottom:6}}>Tareas pendientes ({projTasksPending.length})</div>
-                    {projTasksPending.slice(0,3).map(t=>(
-                      <div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${T.border}`}}>
-                        <button onClick={()=>toggleTask(t.id)} style={{width:18,height:18,borderRadius:5,border:`1.5px solid ${priorityColor(t.priority)}`,background:'transparent',cursor:'pointer',flexShrink:0}}/>
-                        <span style={{color:T.text,fontSize:12,flex:1}}>{t.title}</span>
-                        {t.dueDate&&<span style={{color:T.dim,fontSize:11}}>{fmtDate(t.dueDate)}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {projMiles.length>0&&(
-                  <div>
-                    <div style={{fontSize:11,fontWeight:600,color:T.purple,marginBottom:6}}>Últimos hitos</div>
-                    {projMiles.map(m=>(
-                      <div key={m.id} style={{fontSize:12,color:T.muted,padding:'4px 0',borderBottom:`1px solid ${T.border}`}}>
-                        <span style={{color:T.purple,marginRight:6}}>🏆</span>{m.title}<span style={{color:T.dim,marginLeft:8}}>{fmtDate(m.date)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            );
-          })()}
-
-          {/* Kanban-style columns */}
-          {sideProjects.length===0
+          {filteredProjs.length===0
             ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
                <div style={{fontSize:36,marginBottom:8}}>🚀</div>
-               <div style={{fontSize:14,marginBottom:12}}>Sin proyectos todavía</div>
+               <div style={{fontSize:14,marginBottom:12}}>Sin proyectos{projFilter!=='all'?' con este estado':''}</div>
                <Btn size="sm" onClick={()=>setModalProj(true)}><Icon name="plus" size={13}/>Crear proyecto</Btn>
              </div>
-            :<div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
-               {visibleProjs.map(p=>{
-                 const st=statusInfo(p.status);
-                 const cnt=spTasks.filter(t=>t.projectId===p.id&&!t.done).length;
-                 const miles=milestones.filter(m=>m.projectId===p.id).length;
-                 return (
-                   <div key={p.id} onClick={()=>setSelProj(selProj?.id===p.id?null:p)}
-                     style={{padding:'16px',background:T.surface,border:`1px solid ${selProj?.id===p.id?p.color||T.accent:T.border}`,borderRadius:12,cursor:'pointer',borderTop:`3px solid ${p.color||T.accent}`,transition:'border-color 0.15s'}}>
-                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
-                       <div style={{color:T.text,fontSize:14,fontWeight:700,lineHeight:1.3,flex:1}}>{p.name}</div>
-                       <span style={{fontSize:11,color:st.color,background:`${st.color}15`,padding:'2px 8px',borderRadius:8,flexShrink:0,marginLeft:8}}>{st.emoji} {st.label}</span>
-                     </div>
-                     {p.description&&<div style={{color:T.muted,fontSize:12,marginBottom:8,lineHeight:1.4}}>{p.description.slice(0,80)}{p.description.length>80?'…':''}</div>}
-                     <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-                       {p.stack&&<span style={{fontSize:11,color:T.muted}}>🛠 {p.stack}</span>}
-                       {cnt>0&&<span style={{fontSize:11,color:T.accent}}>✅ {cnt} tareas</span>}
-                       {miles>0&&<span style={{fontSize:11,color:T.purple}}>🏆 {miles} hitos</span>}
-                       {p.url&&<span style={{fontSize:11,color:T.blue}}>🔗 Live</span>}
-                     </div>
-                   </div>
-                 );
-               })}
-             </div>
+            :filteredProjs.map(p=>{
+              const si=statusInfo(p.status);
+              const hours=projHours(p.id);
+              const weekH=thisWeekHours(p.id);
+              const msPct=milestonePct(p.id);
+              const isSel=selProj?.id===p.id;
+              return (
+                <div key={p.id} style={{marginBottom:10}}>
+                  <Card style={{border:`1px solid ${isSel?p.color||T.accent:T.border}`,borderLeft:`3px solid ${p.color||T.accent}`,cursor:'pointer'}}
+                    onClick={()=>setSelProj(isSel?null:p)}>
+                    <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                          <span style={{color:T.text,fontWeight:700,fontSize:14}}>{p.name}</span>
+                          <span style={{fontSize:11,fontWeight:600,color:si.color,background:`${si.color}18`,padding:'2px 8px',borderRadius:6}}>{si.emoji} {si.label}</span>
+                        </div>
+                        {p.description&&<div style={{color:T.muted,fontSize:12,marginTop:4,lineHeight:1.5}}>{p.description}</div>}
+                        <div style={{display:'flex',gap:12,marginTop:6,flexWrap:'wrap'}}>
+                          {hours>0&&<span style={{fontSize:11,color:T.muted}}>⏱️ {hours.toFixed(1)}h total</span>}
+                          {weekH>0&&<span style={{fontSize:11,color:T.accent}}>🔥 {weekH.toFixed(1)}h esta semana</span>}
+                          {p.revenue>0&&<span style={{fontSize:11,color:T.green}}>💰 ${Number(p.revenue).toLocaleString()}</span>}
+                          {p.costs>0&&<span style={{fontSize:11,color:T.red}}>💸 -${Number(p.costs).toLocaleString()}</span>}
+                          {p.stack&&<span style={{fontSize:11,color:T.muted}}>🛠️ {p.stack}</span>}
+                        </div>
+                        {msPct!==null&&(
+                          <div style={{marginTop:8}}>
+                            <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                              <span style={{fontSize:10,color:T.muted}}>Milestones</span>
+                              <span style={{fontSize:10,fontWeight:700,color:p.color||T.accent}}>{msPct}%</span>
+                            </div>
+                            <div style={{height:3,background:T.border,borderRadius:2,overflow:'hidden'}}>
+                              <div style={{height:'100%',width:`${msPct}%`,background:p.color||T.accent,borderRadius:2,transition:'width 0.5s'}}/>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{display:'flex',gap:4,flexShrink:0}}>
+                        <button onClick={e=>{e.stopPropagation();openEditProj(p);}} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,padding:'3px 8px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>✏️</button>
+                        <button onClick={e=>{e.stopPropagation();delProj(p.id);}} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Expanded: deployment + milestone roadmap + quick actions */}
+                  {isSel&&(
+                    <div style={{background:T.surface2,border:`1px solid ${T.border}`,borderTop:'none',borderRadius:'0 0 12px 12px',padding:'14px 16px'}}>
+                      {/* Deployment info */}
+                      {(p.url||p.repoUrl||p.platform)&&(
+                        <div style={{marginBottom:12}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,marginBottom:6}}>🚀 Despliegue</div>
+                          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                            {p.url&&<a href={p.url.startsWith('http')?p.url:`https://${p.url}`} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',background:`${T.accent}12`,border:`1px solid ${T.accent}30`,borderRadius:7,color:T.accent,fontSize:11,fontWeight:600,textDecoration:'none'}}>🌐 {p.url}</a>}
+                            {p.repoUrl&&<a href={p.repoUrl.startsWith('http')?p.repoUrl:`https://${p.repoUrl}`} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',background:`${T.purple}12`,border:`1px solid ${T.purple}30`,borderRadius:7,color:T.purple,fontSize:11,fontWeight:600,textDecoration:'none'}}>📦 {p.repoUrl.replace('https://','')}</a>}
+                            {p.platform&&<span style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',background:`${T.blue}12`,border:`1px solid ${T.blue}30`,borderRadius:7,color:T.blue,fontSize:11,fontWeight:600}}>☁️ {p.platform}</span>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Milestone roadmap */}
+                      {projMilestones(p.id).length>0&&(
+                        <div style={{marginBottom:12}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,marginBottom:8}}>🗺️ Roadmap</div>
+                          <div style={{position:'relative',paddingLeft:22}}>
+                            <div style={{position:'absolute',left:8,top:6,bottom:6,width:2,background:T.border,borderRadius:1}}/>
+                            {projMilestones(p.id).map((m,idx)=>(
+                              <div key={m.id} style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:idx<projMilestones(p.id).length-1?10:0,position:'relative'}}>
+                                <button onClick={()=>toggleMile(m.id)} style={{position:'absolute',left:-22,top:0,width:18,height:18,borderRadius:'50%',background:m.done?p.color||T.accent:T.surface2,border:`2px solid ${m.done?p.color||T.accent:T.border}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0,flexShrink:0}}>
+                                  {m.done&&<span style={{color:'#000',fontSize:8,fontWeight:900}}>✓</span>}
+                                </button>
+                                <div style={{flex:1}}>
+                                  <div style={{fontSize:12,color:m.done?T.muted:T.text,fontWeight:m.done?400:600,textDecoration:m.done?'line-through':'none'}}>{m.title}</div>
+                                  <div style={{fontSize:10,color:T.dim,marginTop:1}}>{fmtDate(m.date)}</div>
+                                </div>
+                                <button onClick={()=>delMile(m.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2}}><Icon name="trash" size={10}/></button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Quick actions */}
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        <button onClick={()=>{setMileForm({projectId:p.id,title:'',date:today(),notes:''});setModalMile(true);}} style={{padding:'5px 11px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>+ Hito</button>
+                        <button onClick={()=>{setTaskForm({projectId:p.id,title:'',priority:'media',dueDate:'',done:false});setModalTask(true);}} style={{padding:'5px 11px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>+ Tarea</button>
+                        <button onClick={()=>{setTimeForm({projectId:p.id,hours:'',note:'',date:today()});setModalTime(true);}} style={{padding:'5px 11px',borderRadius:8,border:`1px solid ${T.accent}`,background:`${T.accent}12`,color:T.accent,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>⏱️ Registrar tiempo</button>
+                        {STATUSES.map(s=>s.id!==p.status&&(
+                          <button key={s.id} onClick={()=>updateStatus(p.id,s.id)} style={{padding:'5px 11px',borderRadius:8,border:`1px solid ${s.color}40`,background:`${s.color}10`,color:s.color,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>{s.emoji} {s.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
           }
         </div>
       )}
@@ -4310,76 +4659,34 @@ const SideProjects = ({data,setData,isMobile,onBack}) => {
       {/* ══════════ TAREAS ══════════ */}
       {tab==='tareas'&&(
         <div>
-          {/* project filter tabs */}
-          {sideProjects.length>0&&(
-            <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-              <button onClick={()=>setSelProj(null)}
-                style={{padding:'5px 12px',borderRadius:8,border:`1px solid ${!selProj?T.accent:T.border}`,background:!selProj?`${T.accent}18`:'transparent',color:!selProj?T.accent:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
-                Todos
-              </button>
-              {sideProjects.map(p=>(
-                <button key={p.id} onClick={()=>setSelProj(selProj?.id===p.id?null:p)}
-                  style={{padding:'5px 12px',borderRadius:8,border:`1px solid ${selProj?.id===p.id?p.color||T.accent:T.border}`,background:selProj?.id===p.id?`${p.color||T.accent}18`:'transparent',color:selProj?.id===p.id?p.color||T.accent:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {(()=>{
-            const filtered=selProj?spTasks.filter(t=>t.projectId===selProj.id):spTasks;
-            const pending=[...filtered.filter(t=>!t.done)].sort((a,b)=>(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
-            const done=filtered.filter(t=>t.done);
-            if(filtered.length===0) return (
-              <div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
-                <div style={{fontSize:36,marginBottom:8}}>✅</div>
-                <div style={{fontSize:14,marginBottom:12}}>Sin tareas{selProj?` en ${selProj.name}`:''}</div>
-                <Btn size="sm" onClick={()=>{setTaskForm({projectId:selProj?.id||'',title:'',priority:'media',dueDate:'',done:false});setModalTask(true);}}><Icon name="plus" size={13}/>Agregar</Btn>
-              </div>
-            );
-            return (
-              <div>
-                {pending.length>0&&(
-                  <div style={{marginBottom:20}}>
-                    <div style={{fontSize:12,fontWeight:600,color:T.muted,marginBottom:10}}>PENDIENTES — {pending.length}</div>
-                    {pending.map(t=>{
-                      const proj=sideProjects.find(p=>p.id===t.projectId);
-                      return (
-                        <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:11,marginBottom:8,borderLeft:`3px solid ${priorityColor(t.priority)}`}}>
-                          <button onClick={()=>toggleTask(t.id)} style={{width:22,height:22,borderRadius:6,border:`2px solid ${priorityColor(t.priority)}`,background:'transparent',cursor:'pointer',flexShrink:0}}/>
-                          <div style={{flex:1}}>
-                            <div style={{color:T.text,fontSize:13,fontWeight:500}}>{t.title}</div>
-                            <div style={{color:T.muted,fontSize:11,marginTop:2,display:'flex',gap:8}}>
-                              {proj&&<span style={{color:proj.color||T.accent}}>◆ {proj.name}</span>}
-                              {t.dueDate&&<span>📅 {fmtDate(t.dueDate)}</span>}
-                            </div>
-                          </div>
-                          <button onClick={()=>delTask(t.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
-                        </div>
-                      );
-                    })}
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
+            <Btn size="sm" onClick={()=>{setTaskForm({projectId:selProj?.id||'',title:'',priority:'media',dueDate:'',done:false});setModalTask(true);}}><Icon name="plus" size={13}/>Nueva tarea</Btn>
+          </div>
+          {spTasks.length===0
+            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
+               <div style={{fontSize:36,marginBottom:8}}>✅</div>
+               <div style={{fontSize:14,marginBottom:12}}>Sin tareas registradas</div>
+               <Btn size="sm" onClick={()=>setModalTask(true)}><Icon name="plus" size={13}/>Agregar tarea</Btn>
+             </div>
+            :[...spTasks].sort((a,b)=>(a.done?1:-1)||(a.dueDate||'z').localeCompare(b.dueDate||'z')).map(t=>{
+              const proj=sideProjects.find(p=>p.id===t.projectId);
+              return (
+                <div key={t.id} style={{display:'flex',gap:10,padding:'12px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,marginBottom:8,opacity:t.done?0.6:1}}>
+                  <button onClick={()=>toggleTask(t.id)} style={{width:20,height:20,borderRadius:6,border:`2px solid ${priorityColor(t.priority)}`,background:t.done?priorityColor(t.priority):'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',marginTop:2}}>
+                    {t.done&&<Icon name="check" size={11} color="#000"/>}
+                  </button>
+                  <div style={{flex:1}}>
+                    <div style={{color:T.text,fontSize:13,fontWeight:600,textDecoration:t.done?'line-through':'none'}}>{t.title}</div>
+                    <div style={{display:'flex',gap:8,marginTop:3,flexWrap:'wrap'}}>
+                      {proj&&<span style={{fontSize:10,color:proj.color||T.accent,background:`${proj.color||T.accent}15`,padding:'1px 7px',borderRadius:6}}>{proj.name}</span>}
+                      {t.dueDate&&<span style={{fontSize:10,color:t.dueDate<today()?T.red:T.muted}}>📅 {fmtDate(t.dueDate)}</span>}
+                    </div>
                   </div>
-                )}
-                {done.length>0&&(
-                  <div style={{opacity:0.5}}>
-                    <div style={{fontSize:12,fontWeight:600,color:T.muted,marginBottom:10}}>COMPLETADAS — {done.length}</div>
-                    {done.map(t=>(
-                      <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:T.surface,borderRadius:10,marginBottom:6}}>
-                        <button onClick={()=>toggleTask(t.id)} style={{width:22,height:22,borderRadius:6,border:`2px solid ${T.green}`,background:`${T.green}30`,cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                          <Icon name="check" size={12} color={T.green}/>
-                        </button>
-                        <div style={{flex:1}}>
-                          <div style={{color:T.muted,fontSize:13,textDecoration:'line-through'}}>{t.title}</div>
-                          <div style={{color:T.dim,fontSize:11}}>{projName(t.projectId)}</div>
-                        </div>
-                        <button onClick={()=>delTask(t.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={12}/></button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+                  <button onClick={()=>delTask(t.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex',flexShrink:0}}><Icon name="trash" size={13}/></button>
+                </div>
+              );
+            })
+          }
         </div>
       )}
 
@@ -4414,10 +4721,12 @@ const SideProjects = ({data,setData,isMobile,onBack}) => {
             return [...filtered].sort((a,b)=>b.date.localeCompare(a.date)).map(m=>{
               const proj=sideProjects.find(p=>p.id===m.projectId);
               return (
-                <div key={m.id} style={{display:'flex',gap:12,padding:'14px 16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,marginBottom:10,borderLeft:`3px solid ${proj?.color||T.purple}`}}>
-                  <div style={{width:40,height:40,borderRadius:12,background:`${T.purple}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>🏆</div>
+                <div key={m.id} style={{display:'flex',gap:12,padding:'14px 16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,marginBottom:10,borderLeft:`3px solid ${proj?.color||T.purple}`,opacity:m.done?0.7:1}}>
+                  <button onClick={()=>toggleMile(m.id)} style={{width:22,height:22,borderRadius:'50%',border:`2px solid ${m.done?proj?.color||T.accent:T.border}`,background:m.done?proj?.color||T.accent:'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',marginTop:2}}>
+                    {m.done&&<Icon name="check" size={11} color="#000"/>}
+                  </button>
                   <div style={{flex:1}}>
-                    <div style={{color:T.text,fontSize:14,fontWeight:600}}>{m.title}</div>
+                    <div style={{color:T.text,fontSize:14,fontWeight:600,textDecoration:m.done?'line-through':'none'}}>{m.title}</div>
                     <div style={{display:'flex',gap:10,marginTop:4,flexWrap:'wrap'}}>
                       {proj&&<span style={{fontSize:11,color:proj.color||T.purple,background:`${proj.color||T.purple}15`,padding:'2px 8px',borderRadius:8}}>{proj.name}</span>}
                       <span style={{fontSize:11,color:T.muted}}>📅 {fmtDate(m.date)}</span>
@@ -4432,6 +4741,56 @@ const SideProjects = ({data,setData,isMobile,onBack}) => {
         </div>
       )}
 
+      {/* ══════════ TIEMPO ══════════ */}
+      {tab==='tiempo'&&(
+        <div>
+          {/* per-project summary */}
+          {sideProjects.length>0&&(
+            <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+              {sideProjects.map(p=>{
+                const total=projHours(p.id);
+                const week=thisWeekHours(p.id);
+                const projLogs=timeLogs.filter(t=>t.projectId===p.id).slice(0,3);
+                return (
+                  <Card key={p.id} style={{borderLeft:`3px solid ${p.color||T.accent}`}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:projLogs.length?10:0}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{p.name}</div>
+                        <div style={{display:'flex',gap:10,marginTop:3}}>
+                          <span style={{fontSize:11,color:T.muted}}>⏱️ {total.toFixed(1)}h total</span>
+                          {week>0&&<span style={{fontSize:11,color:T.accent}}>🔥 {week.toFixed(1)}h esta semana</span>}
+                        </div>
+                      </div>
+                      <button onClick={()=>{setTimeForm({projectId:p.id,hours:'',note:'',date:today()});setModalTime(true);}} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${T.accent}`,background:`${T.accent}12`,color:T.accent,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>+ Tiempo</button>
+                    </div>
+                    {projLogs.map(log=>(
+                      <div key={log.id} style={{display:'flex',gap:8,padding:'6px 0',borderTop:`1px solid ${T.border}`,alignItems:'flex-start'}}>
+                        <span style={{fontSize:11,color:p.color||T.accent,fontWeight:700,minWidth:30}}>{log.hours}h</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:12,color:T.text}}>{log.note||'Sin nota'}</div>
+                          <div style={{fontSize:10,color:T.dim,marginTop:1}}>{log.date}</div>
+                        </div>
+                        <button onClick={()=>delTimeLog(log.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2}}><Icon name="trash" size={11}/></button>
+                      </div>
+                    ))}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {timeLogs.length===0&&(
+            <div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
+              <div style={{fontSize:36,marginBottom:8}}>⏱️</div>
+              <div style={{fontSize:14,marginBottom:12}}>Sin registros de tiempo aún</div>
+              <Btn size="sm" onClick={()=>{setTimeForm({projectId:sideProjects[0]?.id||'',hours:'',note:'',date:today()});setModalTime(true);}}><Icon name="plus" size={13}/>Registrar tiempo</Btn>
+            </div>
+          )}
+        </div>
+      )}
+
+      </div>{/* end padding wrapper */}
+
       {/* ══════════ MODALES ══════════ */}
       {modalProj&&(
         <Modal title={editingProj?'Editar proyecto':'Nuevo proyecto'} onClose={()=>{setModalProj(false);setEditingProj(null);}}>
@@ -4445,7 +4804,15 @@ const SideProjects = ({data,setData,isMobile,onBack}) => {
               <Input value={projForm.startDate} onChange={v=>setProjForm(f=>({...f,startDate:v}))} type="date"/>
             </div>
             <Input value={projForm.stack} onChange={v=>setProjForm(f=>({...f,stack:v}))} placeholder="Stack / Herramientas (ej: React, Notion, Figma...)"/>
-            <Input value={projForm.url} onChange={v=>setProjForm(f=>({...f,url:v}))} placeholder="URL (si ya está publicado)"/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+              <Input value={projForm.url} onChange={v=>setProjForm(f=>({...f,url:v}))} placeholder="URL publicado"/>
+              <Input value={projForm.repoUrl} onChange={v=>setProjForm(f=>({...f,repoUrl:v}))} placeholder="Repositorio"/>
+              <Input value={projForm.platform} onChange={v=>setProjForm(f=>({...f,platform:v}))} placeholder="Plataforma"/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Input value={projForm.revenue} onChange={v=>setProjForm(f=>({...f,revenue:v}))} placeholder="Ingresos $" type="number"/>
+              <Input value={projForm.costs} onChange={v=>setProjForm(f=>({...f,costs:v}))} placeholder="Costos $" type="number"/>
+            </div>
             <div>
               <div style={{fontSize:12,color:T.muted,marginBottom:6}}>Color</div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -4504,9 +4871,30 @@ const SideProjects = ({data,setData,isMobile,onBack}) => {
           </div>
         </Modal>
       )}
+
+      {modalTime&&(
+        <Modal title="Registrar tiempo" onClose={()=>setModalTime(false)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Select value={timeForm.projectId} onChange={v=>setTimeForm(f=>({...f,projectId:v}))}>
+              <option value="">— Proyecto —</option>
+              {sideProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </Select>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Input value={timeForm.hours} onChange={v=>setTimeForm(f=>({...f,hours:v}))} placeholder="Horas (ej: 1.5)" type="number" step="0.5"/>
+              <Input value={timeForm.date} onChange={v=>setTimeForm(f=>({...f,date:v}))} type="date"/>
+            </div>
+            <Input value={timeForm.note} onChange={v=>setTimeForm(f=>({...f,note:v}))} placeholder="¿En qué trabajaste? (opcional)"/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:20}}>
+            <Btn onClick={saveTimeLog} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
+            <Btn variant="ghost" onClick={()=>setModalTime(false)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
+
 
 // ===================== RELACIONES =====================
 const Relaciones = ({data,setData,isMobile,onBack}) => {
@@ -5242,6 +5630,7 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
   const [maintForm,setMaintForm]     = useState({name:'',category:'',frequencyDays:90,lastDone:'',notes:'',cost:''});
   const [docForm,setDocForm]         = useState({name:'',category:'',expiresAt:'',provider:'',amount:'',notes:''});
   const [contactForm,setContactForm] = useState({name:'',role:'',phone:'',email:'',notes:''});
+  const [contactSearch,setContactSearch] = useState('');
 
   const maints   = data.maintenances||[];
   const docs     = data.homeDocs||[];
@@ -5283,6 +5672,7 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
   const doneMaint=(id)=>{
     const upd=maints.map(m=>m.id===id?{...m,lastDone:today()}:m);
     setData(d=>({...d,maintenances:upd})); save('maintenances',upd);
+    toast.success('Mantenimiento registrado como hecho');
   };
   const delMaint=(id)=>{ const u=maints.filter(m=>m.id!==id); setData(d=>({...d,maintenances:u})); save('maintenances',u); };
   const updateMaint=()=>{
@@ -5375,6 +5765,51 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
           </Card>
         ))}
       </div>
+
+      {/* ── Alertas críticas de documentos ── */}
+      {(expiredDocs.length>0||expiringDocs.length>0)&&(
+        <div style={{background:`${T.red}10`,border:`1px solid ${T.red}35`,borderRadius:12,padding:'12px 16px',display:'flex',gap:12,alignItems:'flex-start',marginBottom:12}}>
+          <span style={{fontSize:22,flexShrink:0}}>🔔</span>
+          <div style={{flex:1}}>
+            <div style={{color:T.red,fontWeight:700,fontSize:13,marginBottom:4}}>
+              {expiredDocs.length>0&&`${expiredDocs.length} documento${expiredDocs.length>1?'s':''} vencido${expiredDocs.length>1?'s':''}`}
+              {expiredDocs.length>0&&expiringDocs.length>0&&' · '}
+              {expiringDocs.length>0&&`${expiringDocs.length} por vencer pronto`}
+            </div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {[...expiredDocs,...expiringDocs].slice(0,4).map(d=>{
+                const dd=diffDays(d.expiresAt);
+                return <span key={d.id} style={{fontSize:11,color:dd<=0?T.red:dd<=7?T.orange:T.muted}}>{d.name} {dd<=0?'(vencido)':`(en ${dd}d)`}</span>;
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Costo acumulado por categoría ── */}
+      {maints.filter(m=>m.cost).length>0&&(()=>{
+        const byCategory={};
+        maints.filter(m=>m.cost).forEach(m=>{
+          const cat=m.category||'Sin categoría';
+          byCategory[cat]=(byCategory[cat]||0)+Number(m.cost);
+        });
+        const cats=Object.entries(byCategory).sort((a,b)=>b[1]-a[1]);
+        const total=cats.reduce((s,[,v])=>s+v,0);
+        return (
+          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:'12px 16px',marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,marginBottom:8}}>💰 Costos de mantenimiento por categoría</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:6}}>
+              {cats.map(([cat,cost])=>(
+                <div key={cat} style={{background:T.surface2,borderRadius:8,padding:'6px 12px'}}>
+                  <div style={{fontSize:10,color:T.muted}}>{cat}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.accent}}>${cost.toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:12,color:T.muted}}>Total estimado: <span style={{fontWeight:700,color:T.text}}>${total.toLocaleString()}</span></div>
+          </div>
+        );
+      })()}
 
       {/* ── Próximo mantenimiento banner ── */}
       {nextMaint&&(
@@ -5494,14 +5929,20 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
       {/* ══════════ CONTACTOS ══════════ */}
       {tab==='contactos'&&(
         <div>
-          {contacts.length===0
-            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
+          {(()=>{
+            const fc=contactSearch?contacts.filter(c=>
+              [c.name,c.role,c.specialty,c.notes].join(' ').toLowerCase().includes(contactSearch.toLowerCase())
+            ):contacts;
+            if(contacts.length===0) return (
+              <div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
                <div style={{fontSize:36,marginBottom:8}}>📞</div>
                <div style={{fontSize:14,marginBottom:12}}>Sin contactos de servicio</div>
                <Btn size="sm" onClick={()=>setModalContact(true)}><Icon name="plus" size={13}/>Agregar</Btn>
-             </div>
-            :<div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
-               {contacts.map(c=>(
+              </div>
+            );
+            if(fc.length===0) return <div style={{textAlign:'center',padding:'20px',color:T.dim,fontSize:12}}>Sin resultados para "{contactSearch}"</div>;
+            return <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:10}}>
+               {fc.map(c=>(
                  <div key={c.id} style={{padding:'14px 16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,borderLeft:`3px solid ${T.purple}`}}>
                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
                      <div style={{flex:1,minWidth:0}}>
@@ -5530,8 +5971,8 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
                    </div>
                  </div>
                ))}
-             </div>
-          }
+             </div>;
+          })()}
         </div>
       )}
 
@@ -6044,6 +6485,35 @@ const Finance = ({data,setData,isMobile,onBack}) => {
           <Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={14}/>Nuevo</Btn>
         </div>}/>
 
+      {/* Insights row */}
+      {(()=>{
+        const prevMonthDate2=new Date();prevMonthDate2.setMonth(prevMonthDate2.getMonth()-1);
+        const prevMonthKey=`${prevMonthDate2.getFullYear()}-${String(prevMonthDate2.getMonth()+1).padStart(2,'0')}`;
+        const prevTxs=txs.filter(t=>t.date.slice(0,7)===prevMonthKey);
+        const prevEgr=prevTxs.filter(t=>t.type==='egreso').reduce((s,t)=>s+(t.amount||0),0);
+        const prevIng=prevTxs.filter(t=>t.type==='ingreso').reduce((s,t)=>s+(t.amount||0),0);
+        const expDeltaPct=prevEgr>0?Math.round(((totalEgresos-prevEgr)/prevEgr)*100):null;
+        const topCat=catEntries[0];
+        return (
+          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+            {expDeltaPct!==null&&(
+              <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:9,background:expDeltaPct>10?`${T.red}12`:expDeltaPct<-10?`${T.green}12`:T.surface2,border:`1px solid ${expDeltaPct>10?T.red:expDeltaPct<-10?T.green:T.border}`,fontSize:12}}>
+                <span style={{fontWeight:700,color:expDeltaPct>0?T.red:T.green}}>{expDeltaPct>0?'↑':'↓'}{Math.abs(expDeltaPct)}% egresos</span>
+                <span style={{color:T.dim}}>vs mes anterior</span>
+              </div>
+            )}
+            {topCat&&<div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:9,background:`${T.orange}12`,border:`1px solid ${T.orange}30`,fontSize:12}}><span style={{color:T.orange,fontWeight:700}}>Top gasto:</span><span style={{color:T.text}}>{topCat[0]}</span><span style={{color:T.muted}}>{fmtCurrency(topCat[1])}</span></div>}
+            {savingGoal>0&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderRadius:9,background:`${T.accent}12`,border:`1px solid ${T.accent}30`,fontSize:12,flex:1}}>
+              <span style={{color:T.accent,fontWeight:700}}>Meta ahorro:</span>
+              <div style={{flex:1,height:6,background:T.border,borderRadius:3,overflow:'hidden',minWidth:60}}>
+                <div style={{height:'100%',width:`${savePct}%`,background:T.accent,borderRadius:3}}/>
+              </div>
+              <span style={{color:T.accent,fontWeight:700,whiteSpace:'nowrap'}}>{savePct}%</span>
+            </div>}
+          </div>
+        );
+      })()}
+
       {/* Summary cards */}
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:10,marginBottom:16}}>
         {[
@@ -6355,6 +6825,44 @@ const Finance = ({data,setData,isMobile,onBack}) => {
 };
 
 
+// ===================== TOAST SYSTEM =====================
+const ToastCtx = { listeners: [] };
+const toast = {
+  show:(msg,type='success',sub='')=>ToastCtx.listeners.forEach(fn=>fn({id:Date.now()+Math.random(),msg,type,sub})),
+  success:(msg,sub='')=>toast.show(msg,'success',sub),
+  info:(msg,sub='')=>toast.show(msg,'info',sub),
+  warn:(msg,sub='')=>toast.show(msg,'warn',sub),
+  error:(msg,sub='')=>toast.show(msg,'error',sub),
+};
+const ToastContainer=()=>{
+  const [toasts,setToasts]=useState([]);
+  useEffect(()=>{
+    const fn=(t)=>{
+      setToasts(prev=>[...prev.slice(-4),t]);
+      setTimeout(()=>setToasts(prev=>prev.filter(x=>x.id!==t.id)),4000);
+    };
+    ToastCtx.listeners.push(fn);
+    return()=>{ToastCtx.listeners=ToastCtx.listeners.filter(f=>f!==fn);};
+  },[]);
+  const tColor=(type)=>({success:T.accent,info:T.blue,warn:T.orange,error:T.red}[type]||T.accent);
+  if(!toasts.length) return null;
+  return (
+    <div style={{position:'fixed',bottom:isMobileGlobal?72:24,right:16,zIndex:9999,display:'flex',flexDirection:'column',gap:8,maxWidth:320,minWidth:240}}>
+      {toasts.map(t=>(
+        <div key={t.id} style={{background:T.surface2,border:`1px solid ${tColor(t.type)}40`,borderLeft:`3px solid ${tColor(t.type)}`,borderRadius:10,padding:'10px 14px',display:'flex',gap:10,alignItems:'flex-start',boxShadow:'0 4px 24px rgba(0,0,0,0.4)',animation:'slideIn 0.2s ease'}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text}}>{t.msg}</div>
+            {t.sub&&<div style={{fontSize:11,color:T.muted,marginTop:2}}>{t.sub}</div>}
+          </div>
+          <button onClick={()=>setToasts(p=>p.filter(x=>x.id!==t.id))} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',fontSize:18,padding:0,lineHeight:1,flexShrink:0}}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+};
+let isMobileGlobal=false;
+
+
 export default function App() {
   const [view,setView]=useState('dashboard');
   const [viewHint,setViewHint]=useState(null);
@@ -6364,6 +6872,7 @@ export default function App() {
   const [showSearch,setShowSearch]=useState(false);
   const [apiKey,setApiKey]=useState(()=>localStorage.getItem('sb_gemini_key')||'');
   const isMobile=useIsMobile();
+  isMobileGlobal=isMobile;
 
   // ── Emoji favicon ──
   useEffect(()=>{
@@ -6398,7 +6907,7 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
       const def=initData();
-      const [areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,journal,books,shopping,education]=await Promise.all([
+      const [areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,spTimeLogs,journal,books,shopping,education]=await Promise.all([
         load('areas',def.areas),load('objectives',def.objectives),load('projects',def.projects),
         load('tasks',def.tasks),load('notes',def.notes),load('inbox',def.inbox),load('habits',def.habits),load('budget',def.budget),
         load('transactions',def.transactions),
@@ -6406,7 +6915,7 @@ export default function App() {
         load('maintenances',def.maintenances),load('homeDocs',def.homeDocs),load('homeContacts',def.homeContacts),
         load('learnings',def.learnings),load('retros',def.retros),load('ideas',def.ideas),
         load('people',def.people),load('followUps',def.followUps),load('interactions',def.interactions),
-        load('sideProjects',def.sideProjects),load('spTasks',def.spTasks),load('milestones',def.milestones),
+        load('sideProjects',def.sideProjects),load('spTasks',def.spTasks),load('milestones',def.milestones),load('spTimeLogs',def.spTimeLogs),
         load('journal',def.journal),load('books',def.books),load('shopping',def.shopping),load('education',def.education),
       ]);
       setData({areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,journal,books,shopping,education});
@@ -6428,14 +6937,19 @@ export default function App() {
     objectives:<Objectives {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
     projects:<ProjectsAndTasks {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
     notes:<Notes {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
-    finance:<Finance {...props}/>,
+    finance:<Finance {...props} onBack={()=>navTo('dashboard')}/>,
     inbox:<Inbox {...props}/>,
     habits:<HabitTracker {...props}/>,
     journal:<Journal {...props}/>,
     books:<Books {...props}/>,
     shopping:<Shopping {...props}/>,
     education:<Education {...props}/>,
-    settings:<Settings apiKey={apiKey} setApiKey={setApiKey} isMobile={isMobile}/>,
+    health:<Health {...props} onBack={()=>navTo('dashboard')}/>,
+    relaciones:<Relaciones {...props} onBack={()=>navTo('dashboard')}/>,
+    sideprojects:<SideProjects {...props} onBack={()=>navTo('dashboard')}/>,
+    desarrollo:<DesarrolloPersonal {...props} onBack={()=>navTo('dashboard')}/>,
+    hogar:<Hogar {...props} onBack={()=>navTo('dashboard')}/>,
+    settings:<Settings apiKey={apiKey} setApiKey={setApiKey} isMobile={isMobile} data={data} setData={setData}/>,
   };
   
 
@@ -6448,6 +6962,7 @@ export default function App() {
         ::-webkit-scrollbar{width:5px;}
         ::-webkit-scrollbar-track{background:transparent;}
         ::-webkit-scrollbar-thumb{background:${T.border};border-radius:3px;}
+        @keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
         input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.5);}
         select option{background:${T.surface};}
       `}</style>
@@ -6466,20 +6981,25 @@ export default function App() {
               </div>
             </div>
           </div>
-          <nav style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>
-            {NAV.map(item=>{
-              const active=view===item.id;
-              const badge=item.id==='inbox'&&inboxCount>0?inboxCount:null;
-              return (
-                <button key={item.id} onClick={()=>navTo(item.id)}
-                  style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:9,border:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit',fontSize:13,fontWeight:active?600:400,
-                    background:active?`${T.accent}18`:'transparent',color:active?T.accent:T.muted,marginBottom:2,transition:'all 0.15s'}}>
-                  <Icon name={item.icon} size={16} color={active?T.accent:undefined}/>
-                  <span style={{flex:1}}>{item.label}</span>
-                  {badge&&<span style={{background:T.red,color:'#fff',fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:10}}>{badge}</span>}
-                </button>
-              );
-            })}
+          <nav style={{flex:1,padding:'8px 8px',overflowY:'auto'}}>
+            {NAV_SECTIONS.map(section=>(
+              <div key={section.label} style={{marginBottom:4}}>
+                <div style={{fontSize:9,fontWeight:700,color:T.dim,letterSpacing:1.2,textTransform:'uppercase',padding:'8px 12px 4px'}}>{section.label}</div>
+                {section.items.map(item=>{
+                  const active=view===item.id;
+                  const badge=item.id==='inbox'&&inboxCount>0?inboxCount:null;
+                  return (
+                    <button key={item.id} onClick={()=>navTo(item.id)}
+                      style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'7px 12px',borderRadius:9,border:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit',fontSize:12,fontWeight:active?600:400,
+                        background:active?`${T.accent}18`:'transparent',color:active?T.accent:T.muted,transition:'all 0.15s',marginBottom:1}}>
+                      <Icon name={item.icon} size={15} color={active?T.accent:T.muted}/>
+                      <span style={{flex:1}}>{item.label}</span>
+                      {badge&&<span style={{background:T.red,color:'#fff',fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:10}}>{badge}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
           <div style={{padding:'12px 16px',borderTop:`1px solid ${T.border}`,display:'flex',flexDirection:'column',gap:6}}>
             <button onClick={()=>setShowSearch(true)} style={{display:'flex',alignItems:'center',gap:8,background:'transparent',border:`1px solid ${T.border}`,borderRadius:8,padding:'6px 10px',cursor:'pointer',color:T.muted,fontSize:12,fontFamily:'inherit',width:'100%',marginBottom:4}}>
@@ -6554,6 +7074,7 @@ export default function App() {
       <Psicke apiKey={apiKey} onGoSettings={()=>navTo('settings')} data={data} setData={setData}
         openFromNav={psickeOpen} onNavClose={()=>setPsickeOpen(false)}/>
 
+      <ToastContainer/>
     </div>
   );
 }
