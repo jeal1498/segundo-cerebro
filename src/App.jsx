@@ -332,54 +332,10 @@ const Dashboard = ({data,isMobile,onNavigate}) => {
 };
 
 // ===================== AREAS =====================
-const Areas = ({data,setData,isMobile,onNavigate}) => {
-  const [modal,setModal]=useState(false);
-  const [editModal,setEditModal]=useState(false);
-  const [editingArea,setEditingArea]=useState(null);
-  const [form,setForm]=useState({name:'',icon:'🌟',color:T.areaColors[0]});
-  const [editForm,setEditForm]=useState({name:'',icon:'🌟',color:T.areaColors[0]});
-  const emojis=['💪','💼','💰','📚','🏠','❤️','🎨','🌍','🎵','⚽','✈️','🍎','🧘','🎯','🔬','💡','🚀','👥','🧠','🌟','🏃','🎓','🔑','🛒'];
-  const saveArea=()=>{
-    if(!form.name.trim())return;
-    const updated=[...data.areas,{id:uid(),...form}];
-    setData(d=>({...d,areas:updated}));save('areas',updated);
-    setModal(false);setForm({name:'',icon:'🌟',color:T.areaColors[0]});
-  };
-  const updateArea=()=>{
-    if(!editForm.name.trim()||!editingArea)return;
-    const updated=data.areas.map(a=>a.id===editingArea.id?{...a,...editForm}:a);
-    setData(d=>({...d,areas:updated}));save('areas',updated);
-    setEditModal(false);setEditingArea(null);
-  };
-  const openEdit=(e,area)=>{
-    e.stopPropagation();
-    setEditingArea(area);
-    setEditForm({name:area.name,icon:area.icon,color:area.color});
-    setEditModal(true);
-  };
-  const del=(id)=>{
-    if(!window.confirm('¿Eliminar esta área? Los objetivos, proyectos y notas vinculados quedarán sin área asignada.'))return;
-    const u=data.areas.filter(a=>a.id!==id);
-    const updObj=data.objectives.map(o=>o.areaId===id?{...o,areaId:''}:o);
-    const updProj=data.projects.map(p=>p.areaId===id?{...p,areaId:''}:p);
-    const updNotes=data.notes.map(n=>n.areaId===id?{...n,areaId:''}:n);
-    setData(d=>({...d,areas:u,objectives:updObj,projects:updProj,notes:updNotes}));
-    save('areas',u);save('objectives',updObj);save('projects',updProj);save('notes',updNotes);
-  };
-  const EmojiPicker=({value,onChange})=>(
-    <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-      {emojis.map(e=><button key={e} onClick={()=>onChange(e)} style={{width:40,height:40,borderRadius:10,border:`2px solid ${value===e?T.accent:T.border}`,background:T.bg,cursor:'pointer',fontSize:18}}>{e}</button>)}
-    </div>
-  );
-  const ColorPicker=({value,onChange})=>(
-    <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-      {T.areaColors.map(c=><button key={c} onClick={()=>onChange(c)} style={{width:32,height:32,borderRadius:'50%',background:c,border:`3px solid ${value===c?T.text:'transparent'}`,cursor:'pointer'}}/>)}
-    </div>
-  );
+const Areas = ({data,isMobile,onNavigate}) => {
   return (
     <div>
-      <PageHeader title="Áreas de vida" subtitle="Los grandes pilares de tu vida." isMobile={isMobile}
-        action={<Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Nueva</Btn>}/>
+      <PageHeader title="Áreas de vida" subtitle="Los grandes pilares de tu vida." isMobile={isMobile}/>
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(auto-fill,minmax(180px,1fr))',gap:12}}>
         {data.areas.map(a=>{
           const objCount=data.objectives.filter(o=>o.areaId===a.id).length;
@@ -394,65 +350,10 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
                 <span style={{fontSize:11,color:T.muted,background:T.surface2,padding:'2px 8px',borderRadius:20}}>{projCount} proy</span>
               </div>
               <div style={{fontSize:10,color:T.accent,fontWeight:500}}>Ver detalle →</div>
-              {/* Edit + Delete buttons */}
-              <div style={{position:'absolute',top:8,right:8,display:'flex',gap:4}}>
-                <button onClick={e=>openEdit(e,a)}
-                  style={{background:`${T.accent}18`,border:`1px solid ${T.accent}40`,borderRadius:7,color:T.accent,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',fontSize:11,fontWeight:600,gap:3}}>
-                  ✏️
-                </button>
-                <button onClick={e=>{e.stopPropagation();del(a.id);}}
-                  style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}>
-                  <Icon name="trash" size={14}/>
-                </button>
-              </div>
             </Card>
           );
         })}
-        <div onClick={()=>setModal(true)} style={{border:`2px dashed ${T.border}`,borderRadius:12,padding:16,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,color:T.dim,minHeight:100}}
-          onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
-          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-          <Icon name="plus" size={20}/><span style={{fontSize:13}}>Nueva área</span>
-        </div>
       </div>
-
-      {/* CREATE modal */}
-      {modal&&(
-        <Modal title="Nueva área" onClose={()=>setModal(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <Input value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="Nombre del área"/>
-            <div>
-              <label style={{color:T.muted,fontSize:12,marginBottom:8,display:'block'}}>Icono</label>
-              <EmojiPicker value={form.icon} onChange={v=>setForm(f=>({...f,icon:v}))}/>
-            </div>
-            <div>
-              <label style={{color:T.muted,fontSize:12,marginBottom:8,display:'block'}}>Color</label>
-              <ColorPicker value={form.color} onChange={v=>setForm(f=>({...f,color:v}))}/>
-            </div>
-            <Btn onClick={saveArea} style={{width:'100%',justifyContent:'center'}}>Crear área</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {/* EDIT modal */}
-      {editModal&&editingArea&&(
-        <Modal title={`Editar — ${editingArea.name}`} onClose={()=>{setEditModal(false);setEditingArea(null);}}>
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <Input value={editForm.name} onChange={v=>setEditForm(f=>({...f,name:v}))} placeholder="Nombre del área"/>
-            <div>
-              <label style={{color:T.muted,fontSize:12,marginBottom:8,display:'block'}}>Icono</label>
-              <EmojiPicker value={editForm.icon} onChange={v=>setEditForm(f=>({...f,icon:v}))}/>
-            </div>
-            <div>
-              <label style={{color:T.muted,fontSize:12,marginBottom:8,display:'block'}}>Color</label>
-              <ColorPicker value={editForm.color} onChange={v=>setEditForm(f=>({...f,color:v}))}/>
-            </div>
-            <div style={{display:'flex',gap:10}}>
-              <Btn onClick={updateArea} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
-              <Btn variant="ghost" onClick={()=>{setEditModal(false);setEditingArea(null);}} style={{justifyContent:'center'}}>Cancelar</Btn>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 };
@@ -4229,6 +4130,12 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
   const [modalMaint,setModalMaint]   = useState(false);
   const [modalDoc,setModalDoc]       = useState(false);
   const [modalContact,setModalContact] = useState(false);
+  const [editMaint,setEditMaint]     = useState(null);
+  const [editDoc,setEditDoc]         = useState(null);
+  const [editContact,setEditContact] = useState(null);
+  const [editMaintForm,setEditMaintForm] = useState({});
+  const [editDocForm,setEditDocForm]     = useState({});
+  const [editContactForm,setEditContactForm] = useState({});
   const [maintForm,setMaintForm]     = useState({name:'',category:'',frequencyDays:90,lastDone:'',notes:'',cost:''});
   const [docForm,setDocForm]         = useState({name:'',category:'',expiresAt:'',provider:'',amount:'',notes:''});
   const [contactForm,setContactForm] = useState({name:'',role:'',phone:'',email:'',notes:''});
@@ -4275,6 +4182,11 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
     setData(d=>({...d,maintenances:upd})); save('maintenances',upd);
   };
   const delMaint=(id)=>{ const u=maints.filter(m=>m.id!==id); setData(d=>({...d,maintenances:u})); save('maintenances',u); };
+  const updateMaint=()=>{
+    if(!editMaintForm.name?.trim()) return;
+    const upd=maints.map(m=>m.id===editMaint.id?{...m,...editMaintForm,frequencyDays:Number(editMaintForm.frequencyDays)||90}:m);
+    setData(d=>({...d,maintenances:upd})); save('maintenances',upd); setEditMaint(null);
+  };
 
   // ── DOC actions ──
   const DOC_CATS=['Seguro','Garantía','Contrato','Escritura','Impuesto','Membresía','Suscripción','Otro'];
@@ -4285,6 +4197,11 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
     setModalDoc(false); setDocForm({name:'',category:'',expiresAt:'',provider:'',amount:'',notes:''});
   };
   const delDoc=(id)=>{ const u=docs.filter(d=>d.id!==id); setData(s=>({...s,homeDocs:u})); save('homeDocs',u); };
+  const updateDoc=()=>{
+    if(!editDocForm.name?.trim()) return;
+    const upd=docs.map(d=>d.id===editDoc.id?{...d,...editDocForm}:d);
+    setData(s=>({...s,homeDocs:upd})); save('homeDocs',upd); setEditDoc(null);
+  };
 
   // ── CONTACT actions ──
   const CONTACT_ROLES=['Plomero','Electricista','Médico','Dentista','Veterinario','Mecánico','Abogado','Contador','Jardinero','Limpieza','Cerrajero','Otro'];
@@ -4295,6 +4212,11 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
     setModalContact(false); setContactForm({name:'',role:'',phone:'',email:'',notes:''});
   };
   const delContact=(id)=>{ const u=contacts.filter(c=>c.id!==id); setData(d=>({...d,homeContacts:u})); save('homeContacts',u); };
+  const updateContact=()=>{
+    if(!editContactForm.name?.trim()) return;
+    const upd=contacts.map(c=>c.id===editContact.id?{...c,...editContactForm}:c);
+    setData(d=>({...d,homeContacts:upd})); save('homeContacts',upd); setEditContact(null);
+  };
   const copyPhone=(phone)=>{ navigator.clipboard?.writeText(phone).catch(()=>{}); };
 
   // ── status helpers ──
@@ -4406,6 +4328,7 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
                      <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
                        <span style={{fontSize:11,fontWeight:600,color:st.color,background:`${st.color}15`,padding:'3px 10px',borderRadius:8,whiteSpace:'nowrap'}}>{st.label}</span>
                        <div style={{display:'flex',gap:6}}>
+                         <button onClick={()=>{setEditMaint(m);setEditMaintForm({name:m.name,category:m.category||'',frequencyDays:m.frequencyDays||90,lastDone:m.lastDone||'',notes:m.notes||'',cost:m.cost||'',});}} style={{padding:'5px 8px',background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:8,cursor:'pointer',color:T.accent,fontSize:11,fontFamily:'inherit'}}>✏️</button>
                          <button onClick={()=>doneMaint(m.id)}
                            style={{padding:'5px 10px',background:`${T.green}18`,border:`1px solid ${T.green}40`,borderRadius:8,cursor:'pointer',color:T.green,fontSize:11,fontWeight:600,fontFamily:'inherit'}}>
                            ✓ Hecho hoy
@@ -4452,7 +4375,10 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
                      </div>
                      <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
                        <span style={{fontSize:11,fontWeight:600,color:st.color,background:`${st.color}15`,padding:'3px 10px',borderRadius:8,whiteSpace:'nowrap'}}>{st.label}</span>
-                       <button onClick={()=>delDoc(doc.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
+                       <div style={{display:'flex',gap:4}}>
+                         <button onClick={()=>{setEditDoc(doc);setEditDocForm({name:doc.name,category:doc.category||'',expiresAt:doc.expiresAt||'',provider:doc.provider||'',amount:doc.amount||'',notes:doc.notes||''});}} style={{background:`${T.blue}15`,border:`1px solid ${T.blue}30`,borderRadius:7,color:T.blue,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',fontSize:11}}>✏️</button>
+                         <button onClick={()=>delDoc(doc.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
+                       </div>
                      </div>
                    </div>
                  </div>
@@ -4480,7 +4406,10 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
                        {c.role&&<span style={{fontSize:11,background:`${T.purple}15`,color:T.purple,padding:'2px 8px',borderRadius:8,display:'inline-block',marginTop:4}}>{c.role}</span>}
                        {c.notes&&<div style={{color:T.dim,fontSize:11,marginTop:6}}>{c.notes}</div>}
                      </div>
-                     <button onClick={()=>delContact(c.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex',flexShrink:0}}><Icon name="trash" size={13}/></button>
+                     <div style={{display:'flex',gap:4,flexShrink:0}}>
+                       <button onClick={()=>{setEditContact(c);setEditContactForm({name:c.name,role:c.role||'',phone:c.phone||'',email:c.email||'',notes:c.notes||''});}} style={{background:`${T.purple}15`,border:`1px solid ${T.purple}30`,borderRadius:7,color:T.purple,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',fontSize:11}}>✏️</button>
+                       <button onClick={()=>delContact(c.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
+                     </div>
                    </div>
                    <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}}>
                      {c.phone&&(
@@ -4591,6 +4520,84 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
           </div>
         </Modal>
       )}
+
+      {/* ── Edit: mantenimiento ── */}
+      {editMaint&&(
+        <Modal title="Editar mantenimiento" onClose={()=>setEditMaint(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Input value={editMaintForm.name||''} onChange={v=>setEditMaintForm(f=>({...f,name:v}))} placeholder="Nombre"/>
+            <Select value={editMaintForm.category||''} onChange={v=>setEditMaintForm(f=>({...f,category:v}))}>
+              <option value="">— Categoría —</option>
+              {MAINT_CATS.map(c=><option key={c}>{c}</option>)}
+            </Select>
+            <Input value={editMaintForm.frequencyDays||''} onChange={v=>setEditMaintForm(f=>({...f,frequencyDays:v}))} placeholder="Días entre mantenimientos" type="number"/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div>
+                <div style={{fontSize:12,color:T.muted,marginBottom:6}}>Último realizado</div>
+                <Input value={editMaintForm.lastDone||''} onChange={v=>setEditMaintForm(f=>({...f,lastDone:v}))} type="date"/>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:T.muted,marginBottom:6}}>Costo aprox.</div>
+                <Input value={editMaintForm.cost||''} onChange={v=>setEditMaintForm(f=>({...f,cost:v}))} placeholder="$" type="number"/>
+              </div>
+            </div>
+            <Input value={editMaintForm.notes||''} onChange={v=>setEditMaintForm(f=>({...f,notes:v}))} placeholder="Notas"/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:20}}>
+            <Btn onClick={updateMaint} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+            <Btn variant="ghost" onClick={()=>setEditMaint(null)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Edit: documento ── */}
+      {editDoc&&(
+        <Modal title="Editar documento" onClose={()=>setEditDoc(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Input value={editDocForm.name||''} onChange={v=>setEditDocForm(f=>({...f,name:v}))} placeholder="Nombre"/>
+            <Select value={editDocForm.category||''} onChange={v=>setEditDocForm(f=>({...f,category:v}))}>
+              <option value="">— Categoría —</option>
+              {DOC_CATS.map(c=><option key={c}>{c}</option>)}
+            </Select>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div>
+                <div style={{fontSize:12,color:T.muted,marginBottom:6}}>Vencimiento</div>
+                <Input value={editDocForm.expiresAt||''} onChange={v=>setEditDocForm(f=>({...f,expiresAt:v}))} type="date"/>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:T.muted,marginBottom:6}}>Costo anual</div>
+                <Input value={editDocForm.amount||''} onChange={v=>setEditDocForm(f=>({...f,amount:v}))} placeholder="$" type="number"/>
+              </div>
+            </div>
+            <Input value={editDocForm.provider||''} onChange={v=>setEditDocForm(f=>({...f,provider:v}))} placeholder="Proveedor"/>
+            <Input value={editDocForm.notes||''} onChange={v=>setEditDocForm(f=>({...f,notes:v}))} placeholder="Notas"/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:20}}>
+            <Btn onClick={updateDoc} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+            <Btn variant="ghost" onClick={()=>setEditDoc(null)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Edit: contacto ── */}
+      {editContact&&(
+        <Modal title="Editar contacto" onClose={()=>setEditContact(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Input value={editContactForm.name||''} onChange={v=>setEditContactForm(f=>({...f,name:v}))} placeholder="Nombre"/>
+            <Select value={editContactForm.role||''} onChange={v=>setEditContactForm(f=>({...f,role:v}))}>
+              <option value="">— Rol —</option>
+              {CONTACT_ROLES.map(r=><option key={r}>{r}</option>)}
+            </Select>
+            <Input value={editContactForm.phone||''} onChange={v=>setEditContactForm(f=>({...f,phone:v}))} placeholder="Teléfono"/>
+            <Input value={editContactForm.email||''} onChange={v=>setEditContactForm(f=>({...f,email:v}))} placeholder="Email"/>
+            <Input value={editContactForm.notes||''} onChange={v=>setEditContactForm(f=>({...f,notes:v}))} placeholder="Notas"/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:20}}>
+            <Btn onClick={updateContact} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+            <Btn variant="ghost" onClick={()=>setEditContact(null)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
@@ -4601,6 +4608,12 @@ const Health = ({data,setData,isMobile,onBack}) => {
   const [modalMetric,setModalMetric]=useState(false);
   const [modalMed,setModalMed]=useState(false);
   const [modalWorkout,setModalWorkout]=useState(false);
+  const [editMetric,setEditMetric]=useState(null);
+  const [editMed,setEditMed]=useState(null);
+  const [editWorkout,setEditWorkout]=useState(null);
+  const [editMetricForm,setEditMetricForm]=useState({});
+  const [editMedForm,setEditMedForm]=useState({});
+  const [editWorkoutForm,setEditWorkoutForm]=useState({});
   const [metricForm,setMetricForm]=useState({type:'peso',value:'',unit:'kg',date:today(),note:''});
   const [medForm,setMedForm]=useState({name:'',dose:'',unit:'mg',frequency:'diario',time:'08:00',stock:''});
   const [workoutForm,setWorkoutForm]=useState({type:'Correr',duration:'',calories:'',distance:'',date:today(),note:''});
@@ -4651,6 +4664,11 @@ const Health = ({data,setData,isMobile,onBack}) => {
     setModalMetric(false); setMetricForm({type:'peso',value:'',unit:'kg',date:today(),note:''});
   };
   const delMetric=(id)=>{ const u=metrics.filter(m=>m.id!==id); setData(d=>({...d,healthMetrics:u})); save('healthMetrics',u); };
+  const updateMetric=()=>{
+    if(!editMetricForm.value) return;
+    const upd=metrics.map(m=>m.id===editMetric.id?{...m,...editMetricForm}:m);
+    setData(d=>({...d,healthMetrics:upd})); save('healthMetrics',upd); setEditMetric(null);
+  };
 
   const saveMed=()=>{
     if(!medForm.name.trim()) return;
@@ -4667,6 +4685,11 @@ const Health = ({data,setData,isMobile,onBack}) => {
     setData(d=>({...d,medications:upd})); save('medications',upd);
   };
   const delMed=(id)=>{ const u=meds.filter(m=>m.id!==id); setData(d=>({...d,medications:u})); save('medications',u); };
+  const updateMed=()=>{
+    if(!editMedForm.name?.trim()) return;
+    const upd=meds.map(m=>m.id===editMed.id?{...m,...editMedForm}:m);
+    setData(d=>({...d,medications:upd})); save('medications',upd); setEditMed(null);
+  };
 
   const saveWorkout=()=>{
     if(!workoutForm.duration) return;
@@ -4675,6 +4698,11 @@ const Health = ({data,setData,isMobile,onBack}) => {
     setModalWorkout(false); setWorkoutForm({type:'Correr',duration:'',calories:'',distance:'',date:today(),note:''});
   };
   const delWorkout=(id)=>{ const u=workouts.filter(w=>w.id!==id); setData(d=>({...d,workouts:u})); save('workouts',u); };
+  const updateWorkout=()=>{
+    if(!editWorkoutForm.duration) return;
+    const upd=workouts.map(w=>w.id===editWorkout.id?{...w,...editWorkoutForm,duration:Number(editWorkoutForm.duration),calories:Number(editWorkoutForm.calories)||0}:w);
+    setData(d=>({...d,workouts:upd})); save('workouts',upd); setEditWorkout(null);
+  };
 
   const WORKOUT_TYPES=['Correr','Caminar','Ciclismo','Natación','Gym','Yoga','HIIT','Fútbol','Basquetbol','Otro'];
   const fmtDate=(d)=>{ try{ return new Date(d+'T12:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short'}); }catch{return d;} };
@@ -4775,6 +4803,7 @@ const Health = ({data,setData,isMobile,onBack}) => {
                        <div style={{fontWeight:700,color:T.accent,fontSize:15}}>{m.value} <span style={{fontSize:11,color:T.muted,fontWeight:400}}>{m.unit||mt.unit}</span></div>
                        <div style={{color:T.dim,fontSize:11}}>{fmtDate(m.date)}</div>
                      </div>
+                     <button onClick={()=>{setEditMetric(m);setEditMetricForm({type:m.type,value:m.value,unit:m.unit||mt.unit,date:m.date,note:m.note||''});}} style={{background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:7,color:T.accent,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',flexShrink:0,fontSize:11}}>✏️</button>
                      <button onClick={()=>delMetric(m.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
                    </div>
                  );
@@ -4814,7 +4843,10 @@ const Health = ({data,setData,isMobile,onBack}) => {
                      </div>
                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,flexShrink:0}}>
                        <span style={{fontSize:10,fontWeight:600,color:taken?T.green:T.dim}}>{taken?'✓ Hoy':'Pendiente'}</span>
-                       <button onClick={()=>delMed(m.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2,display:'flex'}}><Icon name="trash" size={12}/></button>
+                       <div style={{display:'flex',gap:4}}>
+                         <button onClick={()=>{setEditMed(m);setEditMedForm({name:m.name,dose:m.dose||'',unit:m.unit||'mg',frequency:m.frequency||'diario',time:m.time||'08:00',stock:m.stock||''});}} style={{background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:7,color:T.accent,cursor:'pointer',padding:'3px 6px',display:'flex',alignItems:'center',fontSize:11}}>✏️</button>
+                         <button onClick={()=>delMed(m.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2,display:'flex'}}><Icon name="trash" size={12}/></button>
+                       </div>
                      </div>
                    </div>
                  );
@@ -4870,7 +4902,10 @@ const Health = ({data,setData,isMobile,onBack}) => {
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
                   <div style={{color:T.dim,fontSize:12}}>{fmtDate(w.date)}</div>
-                  <button onClick={()=>delWorkout(w.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex',marginTop:4}}><Icon name="trash" size={12}/></button>
+                  <div style={{display:'flex',gap:4,marginTop:4}}>
+                    <button onClick={()=>{setEditWorkout(w);setEditWorkoutForm({type:w.type,duration:w.duration,calories:w.calories||'',distance:w.distance||'',date:w.date,note:w.note||''});}} style={{background:`${T.orange}15`,border:`1px solid ${T.orange}30`,borderRadius:7,color:T.orange,cursor:'pointer',padding:'3px 6px',display:'flex',alignItems:'center',fontSize:11}}>✏️</button>
+                    <button onClick={()=>delWorkout(w.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={12}/></button>
+                  </div>
                 </div>
               </div>
             ))
@@ -4946,17 +4981,90 @@ const Health = ({data,setData,isMobile,onBack}) => {
           </div>
         </Modal>
       )}
+
+      {/* ── Edit: métrica ── */}
+      {editMetric&&(
+        <Modal title="Editar métrica" onClose={()=>setEditMetric(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Select value={editMetricForm.type||'peso'} onChange={v=>setEditMetricForm(f=>({...f,type:v,unit:metricInfo(v).unit}))}>
+              {METRIC_TYPES.map(mt=><option key={mt.id} value={mt.id}>{mt.icon} {mt.label}</option>)}
+            </Select>
+            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:10}}>
+              <Input value={editMetricForm.value||''} onChange={v=>setEditMetricForm(f=>({...f,value:v}))} placeholder="Valor" type="number"/>
+              <Input value={editMetricForm.unit||''} onChange={v=>setEditMetricForm(f=>({...f,unit:v}))} placeholder="Unidad"/>
+            </div>
+            <Input value={editMetricForm.date||''} onChange={v=>setEditMetricForm(f=>({...f,date:v}))} type="date"/>
+            <Input value={editMetricForm.note||''} onChange={v=>setEditMetricForm(f=>({...f,note:v}))} placeholder="Nota opcional"/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:20}}>
+            <Btn onClick={updateMetric} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+            <Btn variant="ghost" onClick={()=>setEditMetric(null)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Edit: medicamento ── */}
+      {editMed&&(
+        <Modal title="Editar medicamento" onClose={()=>setEditMed(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Input value={editMedForm.name||''} onChange={v=>setEditMedForm(f=>({...f,name:v}))} placeholder="Nombre del medicamento"/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Input value={editMedForm.dose||''} onChange={v=>setEditMedForm(f=>({...f,dose:v}))} placeholder="Dosis" type="number"/>
+              <Select value={editMedForm.unit||'mg'} onChange={v=>setEditMedForm(f=>({...f,unit:v}))}>
+                {['mg','ml','mcg','UI','gotas','tableta'].map(u=><option key={u}>{u}</option>)}
+              </Select>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Select value={editMedForm.frequency||'diario'} onChange={v=>setEditMedForm(f=>({...f,frequency:v}))}>
+                {['diario','cada 8h','cada 12h','semanal','mensual','cuando sea necesario'].map(fr=><option key={fr}>{fr}</option>)}
+              </Select>
+              <Input value={editMedForm.time||''} onChange={v=>setEditMedForm(f=>({...f,time:v}))} type="time"/>
+            </div>
+            <Input value={editMedForm.stock||''} onChange={v=>setEditMedForm(f=>({...f,stock:v}))} placeholder="Stock disponible" type="number"/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:20}}>
+            <Btn onClick={updateMed} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+            <Btn variant="ghost" onClick={()=>setEditMed(null)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Edit: actividad ── */}
+      {editWorkout&&(
+        <Modal title="Editar actividad" onClose={()=>setEditWorkout(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Select value={editWorkoutForm.type||'Correr'} onChange={v=>setEditWorkoutForm(f=>({...f,type:v}))}>
+              {WORKOUT_TYPES.map(t=><option key={t}>{t}</option>)}
+            </Select>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Input value={editWorkoutForm.duration||''} onChange={v=>setEditWorkoutForm(f=>({...f,duration:v}))} placeholder="Duración (min)" type="number"/>
+              <Input value={editWorkoutForm.calories||''} onChange={v=>setEditWorkoutForm(f=>({...f,calories:v}))} placeholder="Calorías" type="number"/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Input value={editWorkoutForm.distance||''} onChange={v=>setEditWorkoutForm(f=>({...f,distance:v}))} placeholder="Distancia (km)"/>
+              <Input value={editWorkoutForm.date||''} onChange={v=>setEditWorkoutForm(f=>({...f,date:v}))} type="date"/>
+            </div>
+            <Input value={editWorkoutForm.note||''} onChange={v=>setEditWorkoutForm(f=>({...f,note:v}))} placeholder="Nota"/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:20}}>
+            <Btn onClick={updateWorkout} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+            <Btn variant="ghost" onClick={()=>setEditWorkout(null)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
-
-// ===================== FINANCE =====================
 const Finance = ({data,setData,isMobile,onBack}) => {
   const [modal,setModal]=useState(false);
-  const [tab,setTab]=useState('movimientos'); // 'movimientos' | 'presupuesto'
-  const [filter,setFilter]=useState('all'); // 'all'|'ingreso'|'egreso'
+  const [editTx,setEditTx]=useState(null);
+  const [editBudget,setEditBudget]=useState(null);
+  const [tab,setTab]=useState('movimientos');
+  const [filter,setFilter]=useState('all');
   const [monthFilter,setMonthFilter]=useState(today().slice(0,7));
   const [form,setForm]=useState({type:'egreso',amount:'',category:'',description:'',date:today(),currency:'MXN',areaId:''});
+  const [editTxForm,setEditTxForm]=useState({});
+  const [editBudgetForm,setEditBudgetForm]=useState({});
 
   const txs = data.transactions||[];
   const budgets = data.budget||[];
@@ -5003,10 +5111,24 @@ const Finance = ({data,setData,isMobile,onBack}) => {
     save('transactions',upd);
   };
 
+  const updateTx = () => {
+    if(!editTxForm.amount||!editTxForm.description?.trim()) return;
+    const upd=txs.map(t=>t.id===editTx.id?{...t,...editTxForm,amount:Number(editTxForm.amount)}:t);
+    setData(d=>({...d,transactions:upd})); save('transactions',upd);
+    setEditTx(null);
+  };
+
   const delBudget = (id) => {
     const upd=budgets.filter(b=>b.id!==id);
     setData(d=>({...d,budget:upd}));
     save('budget',upd);
+  };
+
+  const updateBudget = () => {
+    if(!editBudgetForm.title?.trim()||!editBudgetForm.amount) return;
+    const upd=budgets.map(b=>b.id===editBudget.id?{...b,...editBudgetForm,amount:Number(editBudgetForm.amount)}:b);
+    setData(d=>({...d,budget:upd})); save('budget',upd);
+    setEditBudget(null);
   };
 
   const fmtCurrency=(n)=>`$${Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -5112,6 +5234,7 @@ const Finance = ({data,setData,isMobile,onBack}) => {
                     {t.type==='ingreso'?'+':'-'}{fmtCurrency(t.amount)}
                   </div>
                 </div>
+                <button onClick={()=>{setEditTx(t);setEditTxForm({type:t.type,amount:t.amount,category:t.category||'',description:t.description,date:t.date,currency:t.currency||'MXN',areaId:t.areaId||''});}} style={{background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:7,color:T.accent,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',flexShrink:0,fontSize:11}}>✏️</button>
                 <button onClick={()=>delTx(t.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex',flexShrink:0}}><Icon name="trash" size={13}/></button>
               </div>
             ))
@@ -5135,6 +5258,7 @@ const Finance = ({data,setData,isMobile,onBack}) => {
                   <div style={{color:T.muted,fontSize:11,marginTop:2}}>Día {b.dayOfMonth} de cada mes · {b.currency||'MXN'}</div>
                 </div>
                 <div style={{color:T.blue,fontWeight:700,fontSize:15,flexShrink:0}}>{fmtCurrency(b.amount)}</div>
+                <button onClick={()=>{setEditBudget(b);setEditBudgetForm({title:b.title,amount:b.amount,dayOfMonth:b.dayOfMonth||1,currency:b.currency||'MXN'});}} style={{background:`${T.blue}15`,border:`1px solid ${T.blue}30`,borderRadius:7,color:T.blue,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',flexShrink:0,fontSize:11}}>✏️</button>
                 <button onClick={()=>delBudget(b.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
               </div>
             ))
@@ -5185,12 +5309,60 @@ const Finance = ({data,setData,isMobile,onBack}) => {
           </div>
         </Modal>
       )}
+      {/* ── Modal: editar transacción ── */}
+      {editTx&&(
+        <Modal title="Editar movimiento" onClose={()=>setEditTx(null)}>
+          <div style={{display:'flex',gap:8,marginBottom:14}}>
+            {['egreso','ingreso'].map(t=>(
+              <button key={t} onClick={()=>setEditTxForm(f=>({...f,type:t,category:''}))}
+                style={{flex:1,padding:'9px 0',borderRadius:10,border:`2px solid ${editTxForm.type===t?(t==='egreso'?T.red:T.green):T.border}`,background:editTxForm.type===t?(t==='egreso'?`${T.red}18`:`${T.green}18`):'transparent',color:editTxForm.type===t?(t==='egreso'?T.red:T.green):T.muted,cursor:'pointer',fontWeight:600,fontSize:14,fontFamily:'inherit'}}>
+                {t==='egreso'?'📉 Egreso':'📈 Ingreso'}
+              </button>
+            ))}
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Input value={editTxForm.description||''} onChange={v=>setEditTxForm(f=>({...f,description:v}))} placeholder="Descripción"/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Input value={editTxForm.amount||''} onChange={v=>setEditTxForm(f=>({...f,amount:v}))} placeholder="Monto" type="number"/>
+              <Select value={editTxForm.currency||'MXN'} onChange={v=>setEditTxForm(f=>({...f,currency:v}))}>
+                {['MXN','USD','EUR','COP','ARS'].map(c=><option key={c}>{c}</option>)}
+              </Select>
+            </div>
+            <Select value={editTxForm.category||''} onChange={v=>setEditTxForm(f=>({...f,category:v}))}>
+              <option value="">— Categoría —</option>
+              {(editTxForm.type==='egreso'?CATS_EGRESO:CATS_INGRESO).map(c=><option key={c}>{c}</option>)}
+            </Select>
+            <Input value={editTxForm.date||''} onChange={v=>setEditTxForm(f=>({...f,date:v}))} type="date"/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:20}}>
+            <Btn onClick={updateTx} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+            <Btn variant="ghost" onClick={()=>setEditTx(null)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal: editar presupuesto fijo ── */}
+      {editBudget&&(
+        <Modal title="Editar presupuesto fijo" onClose={()=>setEditBudget(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Input value={editBudgetForm.title||''} onChange={v=>setEditBudgetForm(f=>({...f,title:v}))} placeholder="Nombre del gasto"/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Input value={editBudgetForm.amount||''} onChange={v=>setEditBudgetForm(f=>({...f,amount:v}))} placeholder="Monto" type="number"/>
+              <Select value={editBudgetForm.currency||'MXN'} onChange={v=>setEditBudgetForm(f=>({...f,currency:v}))}>
+                {['MXN','USD','EUR','COP','ARS'].map(c=><option key={c}>{c}</option>)}
+              </Select>
+            </div>
+            <Input value={editBudgetForm.dayOfMonth||''} onChange={v=>setEditBudgetForm(f=>({...f,dayOfMonth:v}))} placeholder="Día del mes (ej: 1)" type="number"/>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:20}}>
+            <Btn onClick={updateBudget} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+            <Btn variant="ghost" onClick={()=>setEditBudget(null)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
-
-
-export default function App() {
   const [view,setView]=useState('dashboard');
   const [viewHint,setViewHint]=useState(null);
   const [data,setData]=useState(null);
@@ -5248,7 +5420,7 @@ export default function App() {
   const props={data,setData,isMobile};
   const views={
     dashboard:<Dashboard {...props} onNavigate={navigate}/>,
-    areas:<Areas {...props} onNavigate={navigate}/>,
+    areas:<Areas data={data} isMobile={isMobile} onNavigate={navigate}/>,
     areaDetail:<AreaDetail {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate} onBack={()=>navTo('areas')}/>,
     objectives:<Objectives {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
     projects:<ProjectsAndTasks {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
