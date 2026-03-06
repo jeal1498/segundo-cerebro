@@ -356,56 +356,175 @@ const PageHeader = ({title,subtitle,action,isMobile,onBack}) => (
 // ===================== GLOBAL SEARCH =====================
 const GlobalSearch = ({data,onNavigate,onClose}) => {
   const [q,setQ]=useState('');
+  const [activeType,setActiveType]=useState('all');
+  const [expanded,setExpanded]=useState(null);
+  const [recentSearches,setRecentSearches]=useState(()=>{try{return JSON.parse(localStorage.getItem('sb_recent_searches')||'[]');}catch{return [];}});
   const inputRef=useRef(null);
   useEffect(()=>inputRef.current?.focus(),[]);
-  if(!q.trim()) return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:60,backdropFilter:'blur(6px)'}} onClick={onClose}>
-      <div style={{width:'100%',maxWidth:520,padding:'0 16px'}} onClick={e=>e.stopPropagation()}>
-        <div style={{position:'relative'}}>
-          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} autoComplete="off"
-            placeholder="Buscar en todo tu Segundo Cerebro..."
-            style={{width:'100%',background:T.surface,border:`2px solid ${T.accent}`,color:T.text,padding:'14px 44px 14px 16px',borderRadius:14,fontSize:16,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
-          <button onClick={onClose} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:T.muted,cursor:'pointer',display:'flex'}}><Icon name="x" size={20}/></button>
-        </div>
-        <div style={{marginTop:12,color:T.dim,fontSize:12,textAlign:'center'}}>Busca en notas, tareas, objetivos, proyectos y hábitos</div>
-      </div>
-    </div>
-  );
-  const ql=q.toLowerCase();
-  const results=[
-    ...data.notes.filter(n=>n.title.toLowerCase().includes(ql)||n.content.toLowerCase().includes(ql)||(n.tags||[]).some(t=>t.toLowerCase().includes(ql))).map(n=>({type:'📝 Nota',label:n.title,sub:n.content.slice(0,60),action:()=>{onNavigate('notes',n.id);onClose();}})),
-    ...data.tasks.filter(t=>t.title.toLowerCase().includes(ql)).map(t=>({type:'✅ Tarea',label:t.title,sub:t.status==='done'?'Completada':'Pendiente',action:()=>{onNavigate('projects',null);onClose();}})),
-    ...data.objectives.filter(o=>o.title.toLowerCase().includes(ql)).map(o=>({type:'🎯 Objetivo',label:o.title,sub:o.status==='active'?'Activo':'Completado',action:()=>{onNavigate('objectives',null);onClose();}})),
-    ...data.projects.filter(p=>p.title.toLowerCase().includes(ql)).map(p=>({type:'📁 Proyecto',label:p.title,sub:'',action:()=>{onNavigate('projects',null);onClose();}})),
-    ...data.habits.filter(h=>h.name.toLowerCase().includes(ql)).map(h=>({type:'🔁 Hábito',label:h.name,sub:h.frequency==='daily'?'Diario':'Semanal',action:()=>{onNavigate('habits',null);onClose();}})),
-  ];
+
+  const addRecent=(term)=>{
+    if(!term.trim())return;
+    const upd=[term,...recentSearches.filter(r=>r!==term)].slice(0,6);
+    setRecentSearches(upd);
+    try{localStorage.setItem('sb_recent_searches',JSON.stringify(upd));}catch{}
+  };
+
+  const TYPE_META={
+    nota:{label:'📝 Nota',color:'#00c896',nav:'notes'},
+    tarea:{label:'✅ Tarea',color:'#4da6ff',nav:'projects'},
+    objetivo:{label:'🎯 Objetivo',color:'#ff8c42',nav:'objectives'},
+    proyecto:{label:'📁 Proyecto',color:'#4da6ff',nav:'projects'},
+    habito:{label:'🔁 Hábito',color:'#ff5069',nav:'habits'},
+    persona:{label:'👥 Persona',color:'#a78bfa',nav:'relaciones'},
+    transaccion:{label:'💰 Transacción',color:'#ffd166',nav:'finance'},
+    workout:{label:'🏃 Entreno',color:'#00c896',nav:'health'},
+    libro:{label:'📚 Libro',color:'#00c896',nav:'books'},
+    aprendizaje:{label:'🎓 Aprendizaje',color:'#a78bfa',nav:'desarrollo'},
+    idea:{label:'💡 Idea',color:'#ffd166',nav:'desarrollo'},
+  };
+
+  const ql=q.toLowerCase().trim();
+  const buildResults=()=>{
+    if(!ql)return[];
+    const res=[];
+    const push=(type,label,sub,hint,raw='')=>{
+      if(label.toLowerCase().includes(ql)||sub.toLowerCase().includes(ql)||raw.toLowerCase().includes(ql))
+        res.push({type,label,sub,hint});
+    };
+    (data.notes||[]).forEach(n=>push('nota',n.title,n.content.slice(0,80),'notes:'+n.id,n.tags?.join(' ')||''));
+    (data.tasks||[]).forEach(t=>push('tarea',t.title,t.status==='done'?'Completada':'Pendiente','projects'));
+    (data.objectives||[]).forEach(o=>push('objetivo',o.title,o.status==='active'?'Activo':'Completado','objectives'));
+    (data.projects||[]).forEach(p=>push('proyecto',p.title,'','projects'));
+    (data.habits||[]).forEach(h=>push('habito',h.name,h.frequency==='daily'?'Diario':'Semanal','habits'));
+    (data.people||[]).forEach(p=>push('persona',p.name,p.relation||'','relaciones'));
+    (data.transactions||[]).forEach(t=>push('transaccion',t.description,`${t.type==='ingreso'?'+':'-'}$${t.amount} · ${t.date}`,'finance',t.category||''));
+    (data.workouts||[]).forEach(w=>push('workout',`${w.type} · ${w.date}`,`${w.duration}min${w.calories?' · '+w.calories+'kcal':''}`,'health'));
+    (data.books||[]).forEach(b=>push('libro',b.title,b.author||'','books'));
+    (data.learnings||[]).forEach(l=>push('aprendizaje',l.title,l.platform||'','desarrollo'));
+    (data.ideas||[]).forEach(i=>push('idea',i.content.slice(0,60),i.tag||'','desarrollo'));
+    return res;
+  };
+
+  const results=buildResults();
+  const types=[...new Set(results.map(r=>r.type))];
+  const filtered=activeType==='all'?results:results.filter(r=>r.type===activeType);
+
+  const handleSelect=(r)=>{
+    addRecent(q);
+    const meta=TYPE_META[r.type];
+    const [view,hint]=(r.hint||'').includes(':')?[r.hint.split(':')[0],r.hint]:[(r.hint||meta?.nav||''),''];
+    onNavigate(view,hint||null);
+    onClose();
+  };
+
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:60,backdropFilter:'blur(6px)'}} onClick={onClose}>
-      <div style={{width:'100%',maxWidth:520,padding:'0 16px',maxHeight:'70vh',display:'flex',flexDirection:'column'}} onClick={e=>e.stopPropagation()}>
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:56,backdropFilter:'blur(8px)'}}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{width:'100%',maxWidth:560,padding:'0 16px',maxHeight:'80vh',display:'flex',flexDirection:'column',gap:0}} onClick={e=>e.stopPropagation()}>
+
+        {/* Search input */}
         <div style={{position:'relative',marginBottom:8}}>
-          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} autoComplete="off"
-            placeholder="Buscar en todo tu Segundo Cerebro..."
-            style={{width:'100%',background:T.surface,border:`2px solid ${T.accent}`,color:T.text,padding:'14px 44px 14px 16px',borderRadius:14,fontSize:16,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
-          <button onClick={onClose} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:T.muted,cursor:'pointer',display:'flex'}}><Icon name="x" size={20}/></button>
+          <span style={{position:'absolute',left:14,top:'50%',transform:'translateY(-50%)',color:T.muted,fontSize:17,pointerEvents:'none'}}>🔍</span>
+          <input ref={inputRef} value={q} onChange={e=>{setQ(e.target.value);setExpanded(null);setActiveType('all');}} autoComplete="off"
+            onKeyDown={e=>e.key==='Escape'&&onClose()}
+            placeholder="Buscar en toda la app..."
+            style={{width:'100%',background:T.surface,border:`2px solid ${q?T.accent:T.border}`,color:T.text,padding:'14px 44px 14px 44px',borderRadius:14,fontSize:15,outline:'none',boxSizing:'border-box',fontFamily:'inherit',transition:'border-color 0.15s'}}/>
+          <button onClick={onClose} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:T.muted,cursor:'pointer',display:'flex',padding:4}}>
+            <Icon name="x" size={18}/>
+          </button>
         </div>
-        <div style={{overflowY:'auto',background:T.surface,borderRadius:12,border:`1px solid ${T.border}`}}>
-          {results.length===0?(<div style={{padding:'24px',textAlign:'center',color:T.dim,fontSize:14}}>Sin resultados para "{q}"</div>)
-            :results.map((r,i)=>(
-              <div key={i} onClick={r.action} style={{padding:'12px 16px',cursor:'pointer',borderBottom:`1px solid ${T.border}`,display:'flex',gap:10,alignItems:'center'}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                <span style={{fontSize:11,color:T.accent,background:`${T.accent}18`,padding:'2px 8px',borderRadius:8,flexShrink:0,fontWeight:600}}>{r.type}</span>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:T.text,fontSize:14,fontWeight:500}}>{r.label}</div>
-                  {r.sub&&<div style={{color:T.muted,fontSize:12,marginTop:1}}>{r.sub}</div>}
+
+        {/* Content box */}
+        <div style={{background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,overflow:'hidden',maxHeight:'68vh',display:'flex',flexDirection:'column'}}>
+
+          {/* No query: recent + hint */}
+          {!ql&&(
+            <div style={{padding:16}}>
+              {recentSearches.length>0&&(
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.muted,textTransform:'uppercase',letterSpacing:1,marginBottom:8}}>Recientes</div>
+                  <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                    {recentSearches.map(s=>(
+                      <button key={s} onClick={()=>setQ(s)}
+                        style={{padding:'4px 12px',borderRadius:20,border:`1px solid ${T.border}`,background:T.surface2,color:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
+                        <span style={{color:T.dim,fontSize:10}}>↩</span>{s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              )}
+              <div style={{color:T.dim,fontSize:12,textAlign:'center',padding:'8px 0'}}>
+                Busca notas, tareas, personas, gastos, hábitos y más — o presiona <kbd style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:4,padding:'1px 6px',fontSize:10}}>Esc</kbd> para cerrar
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* Type filters when there are results */}
+          {ql&&results.length>0&&types.length>1&&(
+            <div style={{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',gap:5,flexWrap:'wrap',flexShrink:0}}>
+              <button onClick={()=>setActiveType('all')}
+                style={{padding:'3px 10px',borderRadius:8,border:`1px solid ${activeType==='all'?T.accent:T.border}`,background:activeType==='all'?`${T.accent}15`:'transparent',color:activeType==='all'?T.accent:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+                Todos ({results.length})
+              </button>
+              {types.map(t=>{
+                const cnt=results.filter(r=>r.type===t).length;
+                const meta=TYPE_META[t];
+                return (
+                  <button key={t} onClick={()=>setActiveType(t)}
+                    style={{padding:'3px 10px',borderRadius:8,border:`1px solid ${activeType===t?meta.color:T.border}`,background:activeType===t?`${meta.color}15`:'transparent',color:activeType===t?meta.color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+                    {meta.label.split(' ')[0]} {cnt}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Results */}
+          {ql&&(
+            <div style={{overflowY:'auto',flex:1}}>
+              {filtered.length===0
+                ?<div style={{padding:'28px 16px',textAlign:'center',color:T.dim,fontSize:13}}>Sin resultados para "<span style={{color:T.accent}}>{q}</span>"</div>
+                :filtered.map((r,i)=>{
+                  const meta=TYPE_META[r.type];
+                  const isExp=expanded===i;
+                  const hi=(text)=>{
+                    const idx=text.toLowerCase().indexOf(ql);
+                    if(idx<0)return text;
+                    return <>{text.slice(0,idx)}<mark style={{background:`${T.accent}30`,color:T.accent,borderRadius:2,padding:'0 1px'}}>{text.slice(idx,idx+ql.length)}</mark>{text.slice(idx+ql.length)}</>;
+                  };
+                  return (
+                    <div key={i}>
+                      <div onClick={()=>setExpanded(isExp?null:i)}
+                        style={{padding:'11px 16px',cursor:'pointer',borderBottom:`1px solid ${T.border}`,display:'flex',gap:10,alignItems:'center',background:isExp?T.surface2:'transparent',transition:'background 0.1s'}}
+                        onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.surface2;}}
+                        onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background='transparent';}}>
+                        <span style={{fontSize:11,color:meta.color,background:`${meta.color}18`,padding:'2px 8px',borderRadius:8,flexShrink:0,fontWeight:600,whiteSpace:'nowrap'}}>{meta.label}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{color:T.text,fontSize:13,fontWeight:500}}>{hi(r.label)}</div>
+                          {r.sub&&<div style={{color:T.muted,fontSize:11,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hi(r.sub)}</div>}
+                        </div>
+                        <span style={{color:T.dim,fontSize:11,flexShrink:0}}>{isExp?'▲':'▼'}</span>
+                      </div>
+                      {isExp&&(
+                        <div style={{padding:'10px 16px 12px',borderBottom:`1px solid ${T.border}`,background:T.surface2,display:'flex',gap:8}}>
+                          <button onClick={()=>handleSelect(r)}
+                            style={{padding:'6px 16px',borderRadius:9,border:`1px solid ${meta.color}`,background:`${meta.color}15`,color:meta.color,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:600}}>
+                            Abrir en {meta.label.replace(/[^\w ]/g,'').trim()} →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              {ql&&<div style={{padding:'8px 16px',color:T.dim,fontSize:11,textAlign:'center',borderTop:`1px solid ${T.border}`}}>{filtered.length} resultado{filtered.length!==1?'s':''}</div>}
+            </div>
+          )}
         </div>
-        <div style={{marginTop:8,color:T.dim,fontSize:11,textAlign:'center'}}>{results.length} resultado{results.length!==1?'s':''}</div>
       </div>
     </div>
   );
 };
+
 
 // ===================== DASHBOARD =====================
 const Dashboard = ({data,isMobile,onNavigate}) => {
@@ -840,108 +959,277 @@ const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate,onB
 const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) => {
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({title:'',areaId:'',deadline:'',status:'active'});
+  const [view,setView]=useState('list');
+  const [selected,setSelected]=useState(null);
+  const [checkinModal,setCheckinModal]=useState(null);
+  const [checkinForm,setCheckinForm]=useState({mood:'🟢',note:''});
 
-  // Parse area filter from hint like "area:someId"
   const [areaFilter,setAreaFilter]=useState(()=>viewHint?.startsWith('area:')?viewHint.slice(5):null);
   useEffect(()=>{
     if(viewHint?.startsWith('area:')){setAreaFilter(viewHint.slice(5));onConsumeHint?.();}
-    else if(viewHint===null){/* don't clear filter on unrelated nav */}
   },[viewHint]);
 
   const filteredArea=areaFilter?data.areas.find(a=>a.id===areaFilter):null;
+  const allObj=areaFilter?data.objectives.filter(o=>o.areaId===areaFilter):data.objectives;
 
   const saveObj=()=>{
     if(!form.title.trim())return;
-    const updated=[...data.objectives,{id:uid(),...form}];
+    const updated=[...data.objectives,{id:uid(),...form,milestones:[],checkins:[]}];
     setData(d=>({...d,objectives:updated}));save('objectives',updated);
     setModal(false);setForm({title:'',areaId:areaFilter||'',deadline:'',status:'active'});
   };
   const toggle=(id)=>{const u=data.objectives.map(o=>o.id===id?{...o,status:o.status==='active'?'done':'active'}:o);setData(d=>({...d,objectives:u}));save('objectives',u);};
-  const del=(id)=>{const u=data.objectives.filter(o=>o.id!==id);setData(d=>({...d,objectives:u}));save('objectives',u);};
+  const del=(id)=>{const u=data.objectives.filter(o=>o.id!==id);setData(d=>({...d,objectives:u}));save('objectives',u);if(selected===id)setSelected(null);};
 
-  const allObj=areaFilter
-    ?data.objectives.filter(o=>o.areaId===areaFilter)
-    :data.objectives;
+  // Milestones
+  const addMilestone=(objId,text)=>{
+    if(!text.trim())return;
+    const m={id:uid(),text,done:false,weight:20};
+    const u=data.objectives.map(o=>o.id!==objId?o:{...o,milestones:[...(o.milestones||[]),m]});
+    setData(d=>({...d,objectives:u}));save('objectives',u);
+  };
+  const toggleMilestone=(objId,msId)=>{
+    const u=data.objectives.map(o=>o.id!==objId?o:{...o,milestones:(o.milestones||[]).map(m=>m.id!==msId?m:{...m,done:!m.done})});
+    setData(d=>({...d,objectives:u}));save('objectives',u);
+  };
+  const delMilestone=(objId,msId)=>{
+    const u=data.objectives.map(o=>o.id!==objId?o:{...o,milestones:(o.milestones||[]).filter(m=>m.id!==msId)});
+    setData(d=>({...d,objectives:u}));save('objectives',u);
+  };
+
+  // Check-ins
+  const saveCheckin=(objId)=>{
+    if(!checkinForm.note.trim())return;
+    const ci={id:uid(),...checkinForm,date:today()};
+    const u=data.objectives.map(o=>o.id!==objId?o:{...o,checkins:[ci,...(o.checkins||[])]});
+    setData(d=>({...d,objectives:u}));save('objectives',u);
+    setCheckinModal(null);setCheckinForm({mood:'🟢',note:''});
+  };
+
+  const getMsPct=(o)=>{
+    const ms=o.milestones||[];
+    if(!ms.length)return null;
+    const done=ms.filter(m=>m.done).length;
+    return Math.round(done/ms.length*100);
+  };
+  const getTaskPct=(o)=>{
+    const relProj=data.projects.filter(p=>p.objectiveId===o.id);
+    const tasks=data.tasks.filter(t=>relProj.some(p=>p.id===t.projectId));
+    if(!tasks.length)return null;
+    return Math.round(tasks.filter(t=>t.status==='done').length/tasks.length*100);
+  };
+  const getPct=(o)=>{const a=getMsPct(o);const b=getTaskPct(o);return a!==null?a:b!==null?b:0;};
+
+  const daysLeft=(dl)=>Math.ceil((new Date(dl)-new Date())/86400000);
+
+  const selObj=selected?data.objectives.find(o=>o.id===selected):null;
+  const [msInput,setMsInput]=useState('');
 
   return (
     <div>
-      <div style={{marginBottom:20}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div>
-            <h2 style={{margin:0,color:T.text,fontSize:isMobile?18:20,fontWeight:700}}>
-              {filteredArea?`${filteredArea.icon} ${filteredArea.name}`:'Objetivos'}
-            </h2>
-            {filteredArea
-              ?<p style={{color:T.muted,fontSize:13,marginTop:4,marginBottom:0}}>
-                  Objetivos de esta área
-                  <button onClick={()=>setAreaFilter(null)} style={{marginLeft:8,background:'none',border:`1px solid ${T.border}`,borderRadius:6,padding:'1px 8px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>✕ Ver todos</button>
-                </p>
-              :<p style={{color:T.muted,fontSize:13,marginTop:4,marginBottom:0}}>Metas concretas con fecha límite.</p>
-            }
+      {/* Header */}
+      <div style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+        <div>
+          <h2 style={{margin:0,color:T.text,fontSize:isMobile?18:20,fontWeight:700}}>
+            {filteredArea?`${filteredArea.icon} ${filteredArea.name}`:'🎯 Objetivos'}
+          </h2>
+          <p style={{color:T.muted,fontSize:13,marginTop:4,marginBottom:0}}>
+            {filteredArea?<>Objetivos de esta área <button onClick={()=>setAreaFilter(null)} style={{marginLeft:6,background:'none',border:`1px solid ${T.border}`,borderRadius:6,padding:'1px 8px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>✕ Todos</button></>:'Metas concretas con milestones y check-ins.'}
+          </p>
+        </div>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <div style={{display:'flex',gap:3,background:T.surface2,borderRadius:9,padding:3}}>
+            {[['list','☰'],['tree','🌳']].map(([v,l])=>(
+              <button key={v} onClick={()=>setView(v)}
+                style={{padding:'4px 10px',borderRadius:6,border:'none',background:view===v?T.accent:'transparent',color:view===v?'#000':T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit',fontWeight:view===v?700:400}}>
+                {l}
+              </button>
+            ))}
           </div>
           <Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Nuevo</Btn>
         </div>
       </div>
-      {['active','done'].map(status=>{
-        const list=allObj.filter(o=>o.status===status);
-        if(!list.length)return null;
-        return (
-          <div key={status} style={{marginBottom:24}}>
-            <h3 style={{color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>{status==='active'?'Activos':'Completados'}</h3>
-            {list.map(o=>{
-              const area=data.areas.find(a=>a.id===o.areaId);
-              const relProj=data.projects.filter(p=>p.objectiveId===o.id);
-              const objTasks=data.tasks.filter(t=>relProj.some(p=>p.id===t.projectId));
-              const objDone=objTasks.filter(t=>t.status==='done').length;
-              const objPct=objTasks.length?Math.round(objDone/objTasks.length*100):0;
-              const isOverdue=o.deadline&&o.deadline<today()&&status==='active';
-              return (
-                <Card key={o.id} style={{marginBottom:10,opacity:status==='done'?0.6:1,cursor:'pointer'}}
-                  onClick={()=>onNavigate&&onNavigate('projects',`obj:${o.id}`)}>
-                  <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
-                    <button onClick={e=>{e.stopPropagation();toggle(o.id);}} style={{width:24,height:24,borderRadius:'50%',border:`2px solid ${status==='done'?T.green:T.border}`,background:status==='done'?T.green:'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',marginTop:2}}>
-                      {status==='done'&&<Icon name="check" size={12} color="#000"/>}
-                    </button>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{color:T.text,fontWeight:600,fontSize:14,textDecoration:status==='done'?'line-through':'none',marginBottom:6}}>{o.title}</div>
-                      {objTasks.length>0&&(
-                        <div style={{marginBottom:6}}>
-                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                            <span style={{color:T.dim,fontSize:11}}>{objDone}/{objTasks.length} tareas</span>
-                            <span style={{color:objPct===100?T.green:T.accent,fontSize:11,fontWeight:600}}>{objPct}%</span>
+
+      {/* LIST VIEW */}
+      {view==='list'&&(
+        <div>
+          {['active','done'].map(status=>{
+            const list=allObj.filter(o=>o.status===status);
+            if(!list.length)return null;
+            return (
+              <div key={status} style={{marginBottom:24}}>
+                <h3 style={{color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>{status==='active'?'Activos':'Completados'}</h3>
+                {list.map(o=>{
+                  const area=data.areas.find(a=>a.id===o.areaId);
+                  const pct=getPct(o);
+                  const msPct=getMsPct(o);
+                  const taskPct=getTaskPct(o);
+                  const isOverdue=o.deadline&&o.deadline<today()&&status==='active';
+                  const dl=o.deadline?daysLeft(o.deadline):null;
+                  const isSel=selected===o.id;
+                  return (
+                    <div key={o.id} style={{marginBottom:8}}>
+                      <Card style={{opacity:status==='done'?0.65:1,border:`1px solid ${isSel?T.accent:T.border}`}}>
+                        <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                          <button onClick={e=>{e.stopPropagation();toggle(o.id);}}
+                            style={{width:22,height:22,borderRadius:'50%',border:`2px solid ${status==='done'?T.green:T.border}`,background:status==='done'?T.green:'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',marginTop:2}}>
+                            {status==='done'&&<Icon name="check" size={11} color="#000"/>}
+                          </button>
+                          <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>setSelected(isSel?null:o.id)}>
+                            <div style={{color:T.text,fontWeight:600,fontSize:14,textDecoration:status==='done'?'line-through':'none',marginBottom:5}}>{o.title}</div>
+                            {/* Progress bars */}
+                            {(msPct!==null||taskPct!==null)&&(
+                              <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:6}}>
+                                {msPct!==null&&(
+                                  <div>
+                                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                                      <span style={{color:T.dim,fontSize:10}}>🏁 Milestones</span>
+                                      <span style={{color:T.accent,fontSize:10,fontWeight:600}}>{msPct}%</span>
+                                    </div>
+                                    <div style={{height:3,background:T.border,borderRadius:2}}>
+                                      <div style={{height:'100%',width:`${msPct}%`,background:T.accent,borderRadius:2,transition:'width 0.4s'}}/>
+                                    </div>
+                                  </div>
+                                )}
+                                {taskPct!==null&&(
+                                  <div>
+                                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                                      <span style={{color:T.dim,fontSize:10}}>✅ Tareas</span>
+                                      <span style={{color:T.muted,fontSize:10}}>{taskPct}%</span>
+                                    </div>
+                                    <div style={{height:3,background:T.border,borderRadius:2}}>
+                                      <div style={{height:'100%',width:`${taskPct}%`,background:T.muted,borderRadius:2,transition:'width 0.4s'}}/>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                              {area&&<Tag text={`${area.icon} ${area.name}`} color={area.color}/>}
+                              {o.deadline&&<span style={{color:isOverdue?T.red:dl&&dl<=7?T.orange:T.muted,fontSize:12,fontWeight:isOverdue||dl<=7?600:400}}>{isOverdue?'⚠️ Vencido: ':dl&&dl<=7?`⏰ ${dl}d: `:'📅 '}{fmt(o.deadline)}</span>}
+                              <span onClick={e=>{e.stopPropagation();onNavigate&&onNavigate('projects',`obj:${o.id}`);}}
+                                style={{color:T.blue,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                                📁 {data.projects.filter(p=>p.objectiveId===o.id).length} proyectos →
+                              </span>
+                            </div>
                           </div>
-                          <div style={{height:4,background:T.border,borderRadius:2}}>
-                            <div style={{height:'100%',width:`${objPct}%`,background:objPct===100?T.green:T.accent,borderRadius:2,transition:'width 0.4s'}}/>
+                          <div style={{display:'flex',gap:4,flexShrink:0}}>
+                            <button onClick={e=>{e.stopPropagation();setCheckinModal(o.id);setCheckinForm({mood:'🟢',note:''});}}
+                              style={{background:`${T.blue}15`,border:`1px solid ${T.blue}30`,borderRadius:7,color:T.blue,cursor:'pointer',padding:'3px 7px',fontSize:11,fontFamily:'inherit'}}>
+                              ✍️
+                            </button>
+                            <button onClick={e=>{e.stopPropagation();del(o.id);}} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
                           </div>
                         </div>
+                      </Card>
+
+                      {/* Inline detail: milestones + checkins */}
+                      {isSel&&(
+                        <div style={{background:T.surface2,border:`1px solid ${T.border}`,borderTop:'none',borderRadius:'0 0 12px 12px',padding:'14px 16px'}}>
+                          {/* Milestones */}
+                          <div style={{marginBottom:14}}>
+                            <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:8}}>🏁 Milestones</div>
+                            {(o.milestones||[]).map(m=>(
+                              <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${T.border}`}}>
+                                <div onClick={()=>toggleMilestone(o.id,m.id)}
+                                  style={{width:17,height:17,borderRadius:4,border:`2px solid ${m.done?T.accent:T.border}`,background:m.done?T.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer',transition:'all 0.15s'}}>
+                                  {m.done&&<span style={{color:'#000',fontSize:9,fontWeight:900}}>✓</span>}
+                                </div>
+                                <span style={{flex:1,fontSize:12,color:m.done?T.muted:T.text,textDecoration:m.done?'line-through':'none'}}>{m.text}</span>
+                                <button onClick={()=>delMilestone(o.id,m.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2}}><Icon name="trash" size={10}/></button>
+                              </div>
+                            ))}
+                            <div style={{display:'flex',gap:6,marginTop:8}}>
+                              <input value={msInput} onChange={e=>setMsInput(e.target.value)}
+                                onKeyDown={e=>{if(e.key==='Enter'){addMilestone(o.id,msInput);setMsInput('');}}}
+                                placeholder="Agregar milestone... (Enter)" 
+                                style={{flex:1,background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'6px 10px',borderRadius:8,fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                              <button onClick={()=>{addMilestone(o.id,msInput);setMsInput('');}}
+                                style={{padding:'6px 12px',borderRadius:8,border:'none',background:T.accent,color:'#000',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>+</button>
+                            </div>
+                          </div>
+                          {/* Check-ins */}
+                          {(o.checkins||[]).length>0&&(
+                            <div>
+                              <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:8}}>📝 Check-ins</div>
+                              {(o.checkins||[]).slice(0,3).map((ci,i)=>(
+                                <div key={ci.id||i} style={{display:'flex',gap:8,padding:'6px 0',borderBottom:`1px solid ${T.border}`}}>
+                                  <span style={{fontSize:14,flexShrink:0}}>{ci.mood}</span>
+                                  <div><div style={{fontSize:10,color:T.muted}}>{ci.date}</div><div style={{fontSize:12,color:T.text,marginTop:1}}>{ci.note}</div></div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
-                      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-                        {area&&<Tag text={`${area.icon} ${area.name}`} color={area.color}/>}
-                        {o.deadline&&<span style={{color:isOverdue?T.red:T.muted,fontSize:12,fontWeight:isOverdue?600:400}}>{isOverdue?'⚠️ Vencido: ':' 📅 '}{fmt(o.deadline)}</span>}
-                        <span style={{color:relProj.length?T.blue:T.dim,fontSize:12,fontWeight:relProj.length?600:400}}>
-                          📁 {relProj.length} proyecto{relProj.length!==1?'s':''} →
-                        </span>
-                      </div>
                     </div>
-                    <button onClick={e=>{e.stopPropagation();del(o.id);}} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:6,display:'flex'}}><Icon name="trash" size={14}/></button>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        );
-      })}
-      {!allObj.length&&(
-        <div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
-          <Icon name="target" size={40}/>
-          <p style={{marginBottom:12}}>{filteredArea?`Sin objetivos en ${filteredArea.name}`:'Sin objetivos aún'}</p>
-          <Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Crear primer objetivo</Btn>
+                  );
+                })}
+              </div>
+            );
+          })}
+          {!allObj.length&&(
+            <div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
+              <Icon name="target" size={40}/><p style={{marginBottom:12}}>Sin objetivos aún</p>
+              <Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Crear primer objetivo</Btn>
+            </div>
+          )}
         </div>
       )}
+
+      {/* TREE VIEW */}
+      {view==='tree'&&(
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {data.areas.filter(a=>!areaFilter||a.id===areaFilter).map(area=>{
+            const aObjs=data.objectives.filter(o=>o.areaId===area.id&&o.status==='active');
+            if(!aObjs.length)return null;
+            return (
+              <Card key={area.id} style={{padding:14}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                  <div style={{width:10,height:10,borderRadius:3,background:area.color,flexShrink:0}}/>
+                  <span style={{fontSize:13,fontWeight:700,color:area.color}}>{area.icon} {area.name}</span>
+                </div>
+                {aObjs.map(o=>{
+                  const pct=getPct(o);
+                  const relProj=data.projects.filter(p=>p.objectiveId===o.id);
+                  return (
+                    <div key={o.id} style={{marginLeft:16,borderLeft:`2px solid ${area.color}40`,paddingLeft:12,marginBottom:10}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                        <span style={{fontSize:13,fontWeight:600,color:T.text,cursor:'pointer'}} onClick={()=>{setView('list');setSelected(o.id);}}>{o.title}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:T.accent}}>{pct}%</span>
+                      </div>
+                      <div style={{height:4,background:T.border,borderRadius:2,marginBottom:6,overflow:'hidden'}}>
+                        <div style={{height:'100%',width:`${pct}%`,background:area.color,borderRadius:2,transition:'width 0.5s'}}/>
+                      </div>
+                      {relProj.map(p=>{
+                        const pTasks=data.tasks.filter(t=>t.projectId===p.id);
+                        const pp=pTasks.length?Math.round(pTasks.filter(t=>t.status==='done').length/pTasks.length*100):0;
+                        return (
+                          <div key={p.id} style={{marginLeft:16,borderLeft:`2px solid ${T.border}`,paddingLeft:10,marginBottom:5}}>
+                            <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                              <span style={{fontSize:11,color:T.muted}}>📁 {p.title}</span>
+                              <span style={{fontSize:9,color:pp===100?T.accent:T.muted}}>{pTasks.filter(t=>t.status==='done').length}/{pTasks.length}</span>
+                            </div>
+                            <div style={{height:2,background:T.border,borderRadius:1,overflow:'hidden'}}>
+                              <div style={{height:'100%',width:`${pp}%`,background:pp===100?T.accent:T.blue,borderRadius:1,opacity:0.6}}/>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* New objective modal */}
       {modal&&(
         <Modal title="Nuevo objetivo" onClose={()=>setModal(false)}>
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="¿Qué quiere lograr?"/>
+            <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="¿Qué quieres lograr?"/>
             <Select value={form.areaId||areaFilter||''} onChange={v=>setForm(f=>({...f,areaId:v}))}>
               <option value="">Sin área</option>
               {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
@@ -951,9 +1239,29 @@ const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
           </div>
         </Modal>
       )}
+
+      {/* Check-in modal */}
+      {checkinModal&&(
+        <Modal title="Check-in semanal" onClose={()=>setCheckinModal(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{fontSize:13,color:T.muted}}>¿Cómo va este objetivo?</div>
+            <div style={{display:'flex',gap:6}}>
+              {['🟢','🟡','🔴'].map(m=>(
+                <button key={m} onClick={()=>setCheckinForm(f=>({...f,mood:m}))}
+                  style={{flex:1,padding:'8px',borderRadius:10,border:`2px solid ${checkinForm.mood===m?T.accent:T.border}`,background:checkinForm.mood===m?`${T.accent}18`:'transparent',cursor:'pointer',fontSize:20}}>
+                  {m}
+                </button>
+              ))}
+            </div>
+            <Textarea value={checkinForm.note} onChange={v=>setCheckinForm(f=>({...f,note:v}))} placeholder="¿Qué avanzaste? ¿Qué bloqueó?" rows={3}/>
+            <Btn onClick={()=>saveCheckin(checkinModal)} style={{width:'100%',justifyContent:'center'}}>Guardar check-in</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
+
 
 // ===================== PROJECTS & TASKS =====================
 const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) => {
@@ -2528,6 +2836,7 @@ const Psicke=({apiKey,onGoSettings,data,setData,openFromNav,onNavClose})=>{
   const [open,setOpen]=useState(false);
   useEffect(()=>{if(openFromNav)setOpen(true);},[openFromNav]);
   const closePanel=()=>{setOpen(false);onNavClose&&onNavClose();};
+  const [showSugg,setShowSugg]=useState(true);
   const [msgs,setMsgs]=useState([INIT_MSG]);
   const [input,setInput]=useState('');
   const [loading,setLoading]=useState(false);
@@ -2571,9 +2880,27 @@ const Psicke=({apiKey,onGoSettings,data,setData,openFromNav,onNavClose})=>{
     return()=>clearInterval(t);
   },[open]);
 
+
+  // ── Proactive suggestions ──
+  const buildSuggestions=()=>{
+    const s=[];
+    const urgentTasks=(data.tasks||[]).filter(t=>t.status!=='done'&&t.dueDate&&t.dueDate<=today()).length;
+    if(urgentTasks>0) s.push({icon:'⚠️',text:`Tienes ${urgentTasks} tarea${urgentTasks>1?'s':''} vencida${urgentTasks>1?'s':''}. ¿Las revisamos?`,color:'#ff5069',q:`Tengo ${urgentTasks} tareas vencidas`});
+    const activeObjs=(data.objectives||[]).filter(o=>o.status==='active');
+    if(activeObjs.length>0){const o=activeObjs[0];s.push({icon:'🎯',text:`"${o.title.slice(0,40)}" — ¿cómo va ese objetivo?`,color:'#4da6ff',q:`¿Cómo voy con el objetivo: ${o.title}?`});}
+    const todayHabits=(data.habits||[]).filter(h=>!h.completions?.includes(today()));
+    if(todayHabits.length>0) s.push({icon:'🔥',text:`${todayHabits.length} hábito${todayHabits.length>1?'s':''} sin completar hoy.`,color:'#ff8c42',q:'¿Cuáles son mis hábitos de hoy?'});
+    const bdays=(data.people||[]).filter(p=>{if(!p.birthday)return false;const[,m,d]=p.birthday.split('-');const next=new Date(new Date().getFullYear(),Number(m)-1,Number(d));if(next<new Date())next.setFullYear(new Date().getFullYear()+1);return Math.ceil((next-new Date())/86400000)<=7;});
+    if(bdays.length>0) s.push({icon:'🎂',text:`${bdays[0].name} cumple años pronto. ¿Quieres anotarlo?`,color:'#a78bfa',q:`Recuérdame que ${bdays[0].name} cumple años pronto`});
+    if(s.length===0) s.push({icon:'💡',text:'¿Qué tienes en mente hoy?',color:'#00c896',q:'Hazme un resumen del día'});
+    return s.slice(0,4);
+  };
+  const suggestions=buildSuggestions();
+
   const send=async(textOverride=null)=>{
     const text=(textOverride??input).trim();
     if(!text||loading)return;
+    setShowSugg(false);
     const key=(apiKey||'').trim().replace(/\s+/g,'');
     if(!key){setOpen(false);onGoSettings();return;}
     const userMsg={role:'user',content:text};
@@ -2922,6 +3249,34 @@ const Psicke=({apiKey,onGoSettings,data,setData,openFromNav,onNavClose})=>{
               </div>
             </div>
 
+            {/* Back arrow + Suggestions */}
+            {!showSugg&&msgs.length>1&&(
+              <div style={{padding:'0 16px 6px',flexShrink:0}}>
+                <button onClick={()=>setShowSugg(true)}
+                  style={{display:'flex',alignItems:'center',gap:5,background:'none',border:'none',color:T.muted,cursor:'pointer',padding:'4px 0',fontSize:12,fontFamily:'inherit',transition:'color 0.15s'}}
+                  onMouseEnter={e=>e.currentTarget.style.color=T.accent}
+                  onMouseLeave={e=>e.currentTarget.style.color=T.muted}>
+                  ← Sugerencias
+                </button>
+              </div>
+            )}
+            {showSugg&&suggestions.length>0&&(
+              <div style={{padding:'0 14px 10px',flexShrink:0}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.muted,textTransform:'uppercase',letterSpacing:0.8,marginBottom:7}}>Sugerencias</div>
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  {suggestions.map((s,i)=>(
+                    <div key={i} onClick={()=>{setInput(s.q);setShowSugg(false);setTimeout(()=>inputRef.current?.focus(),50);}}
+                      style={{display:'flex',alignItems:'center',gap:9,padding:'8px 11px',background:T.surface2,border:`1px solid ${s.color}28`,borderLeft:`3px solid ${s.color}`,borderRadius:9,cursor:'pointer',transition:'all 0.15s'}}
+                      onMouseEnter={e=>e.currentTarget.style.background='#162030'}
+                      onMouseLeave={e=>e.currentTarget.style.background=T.surface2}>
+                      <span style={{fontSize:15,flexShrink:0}}>{s.icon}</span>
+                      <span style={{fontSize:12,color:T.text,flex:1,lineHeight:1.4}}>{s.text}</span>
+                      <span style={{fontSize:10,color:s.color,fontWeight:700,flexShrink:0}}>→</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Messages */}
             <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:10,minHeight:0}}
               onClick={()=>setMsgMenu(null)}>
@@ -4230,6 +4585,16 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
   const personName=(id)=>people.find(p=>p.id===id)?.name||'Desconocido';
   const personEmoji=(id)=>people.find(p=>p.id===id)?.emoji||'👤';
 
+  // ── Temperature helpers ──
+  const daysAgoFn=(date)=>{try{return Math.floor((new Date()-new Date(date+'T12:00:00'))/86400000);}catch{return 999;}};
+  const lastContactDate=(p)=>{
+    const pInter=[...interactions].filter(i=>i.personId===p.id).sort((a,b)=>b.date.localeCompare(a.date));
+    return pInter[0]?.date||p.createdAt||null;
+  };
+  const tempColor=(days)=>days<=7?T.green:days<=21?T.orange:days<=60?T.yellow:T.red;
+  const tempLabel=(days)=>days<=3?'🟢 Caliente':days<=14?'🟡 Tibio':days<=30?'🟠 Enfriando':'🔴 Frío';
+
+
   const priorityColor=(p)=>p==='alta'?T.red:p==='media'?T.orange:T.green;
 
   return (
@@ -4294,8 +4659,12 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
           {selPerson&&(()=>{
             const personFollows=followUps.filter(f=>f.personId===selPerson.id&&!f.done);
             const personInters=[...interactions].filter(i=>i.personId===selPerson.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
+            const lcd=lastContactDate(selPerson);
+            const days=lcd?daysAgoFn(lcd):999;
+            const tc=tempColor(days);
+            const tl=tempLabel(days);
             return (
-              <Card style={{marginBottom:16,borderLeft:`3px solid ${T.accent}`}}>
+              <Card style={{marginBottom:16,borderLeft:`3px solid ${tc}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
                   <div style={{display:'flex',gap:12,alignItems:'center'}}>
                     <div style={{width:48,height:48,borderRadius:14,background:`${T.accent}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:26}}>{selPerson.emoji}</div>
@@ -4318,6 +4687,16 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
                   {selPerson.email&&<a href={`mailto:${selPerson.email}`} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:`${T.blue}15`,border:`1px solid ${T.blue}30`,borderRadius:8,color:T.blue,fontSize:12,fontWeight:600,textDecoration:'none'}}>✉️ {selPerson.email}</a>}
                   <button onClick={()=>{setInterForm({personId:selPerson.id,type:'Mensaje',notes:'',date:today()});setModalInteraction(true);}} style={{padding:'6px 12px',background:`${T.purple}15`,border:`1px solid ${T.purple}30`,borderRadius:8,color:T.purple,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>💬 Registrar contacto</button>
                   <button onClick={()=>{setFollowForm({personId:selPerson.id,task:'',dueDate:'',priority:'media',done:false});setModalFollowUp(true);}} style={{padding:'6px 12px',background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:8,color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>📋 Agregar seguimiento</button>
+                </div>
+                {/* Temperature bar */}
+                <div style={{marginBottom:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                    <span style={{fontSize:11,color:T.muted}}>Temperatura de relación</span>
+                    <span style={{fontSize:11,fontWeight:700,color:tc}}>{tl} {days<999?`· hace ${days}d`:''}</span>
+                  </div>
+                  <div style={{height:5,background:T.border,borderRadius:3,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${Math.max(0,100-Math.min(days*1.5,100))}%`,background:tc,borderRadius:3,transition:'width 0.5s'}}/>
+                  </div>
                 </div>
                 {selPerson.notes&&<div style={{color:T.muted,fontSize:12,lineHeight:1.6,marginBottom:personFollows.length>0||personInters.length>0?12:0}}>{selPerson.notes}</div>}
                 {personFollows.length>0&&(
@@ -4356,14 +4735,20 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
                {people.map(p=>{
                  const dl=birthdayDaysLeft(p.birthday);
                  const pFollows=followUps.filter(f=>f.personId===p.id&&!f.done).length;
+                 const lcd=lastContactDate(p);
+                 const days=lcd?daysAgoFn(lcd):999;
+                 const tc=tempColor(days);
+                 const tl=tempLabel(days);
                  return (
                    <div key={p.id} onClick={()=>setSelPerson(selPerson?.id===p.id?null:p)}
-                     style={{padding:'14px',background:T.surface,border:`1px solid ${selPerson?.id===p.id?T.accent:T.border}`,borderRadius:12,cursor:'pointer',transition:'border-color 0.15s',position:'relative'}}>
+                     style={{padding:'14px',background:T.surface,border:`1px solid ${selPerson?.id===p.id?T.accent:T.border}`,borderTop:`3px solid ${tc}`,borderRadius:12,cursor:'pointer',transition:'border-color 0.15s',position:'relative'}}>
                      {dl!==null&&dl<=7&&<span style={{position:'absolute',top:8,right:8,fontSize:14}}>🎂</span>}
-                     <div style={{fontSize:32,marginBottom:8}}>{p.emoji}</div>
-                     <div style={{color:T.text,fontSize:14,fontWeight:600}}>{p.name}</div>
-                     {p.relation&&<div style={{fontSize:11,color:T.muted,marginTop:2}}>{p.relation}</div>}
-                     {pFollows>0&&<div style={{marginTop:6,fontSize:11,color:T.accent,background:`${T.accent}15`,padding:'2px 8px',borderRadius:8,display:'inline-block'}}>{pFollows} pendiente{pFollows>1?'s':''}</div>}
+                     <div style={{fontSize:30,marginBottom:6}}>{p.emoji}</div>
+                     <div style={{color:T.text,fontSize:13,fontWeight:600}}>{p.name}</div>
+                     {p.relation&&<div style={{fontSize:10,color:T.muted,marginTop:1}}>{p.relation}</div>}
+                     <div style={{fontSize:10,color:tc,marginTop:4,fontWeight:600}}>{tl}</div>
+                     {lcd&&<div style={{fontSize:9,color:T.dim,marginTop:1}}>hace {days}d</div>}
+                     {pFollows>0&&<div style={{marginTop:5,fontSize:10,color:T.accent,background:`${T.accent}15`,padding:'1px 7px',borderRadius:7,display:'inline-block'}}>{pFollows} pendiente{pFollows>1?'s':''}</div>}
                    </div>
                  );
                })}
@@ -5993,6 +6378,16 @@ export default function App() {
     link.rel='icon'; link.href=canvas.toDataURL();
     document.head.appendChild(link);
     document.title='Segundo Cerebro';
+  },[]);
+
+  // Cmd+K global search
+  useEffect(()=>{
+    const handler=(e)=>{
+      if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setShowSearch(true);}
+      if(e.key==='Escape')setShowSearch(false);
+    };
+    window.addEventListener('keydown',handler);
+    return()=>window.removeEventListener('keydown',handler);
   },[]);
 
   // Smart navigate: sets view + optional hint for target component
