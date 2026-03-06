@@ -1343,23 +1343,54 @@ const Settings = ({apiKey,setApiKey,isMobile}) => {
 // ===================== PSICKE — FLOATING BRAIN =====================
 const buildPsickePrompt=(data)=>{
   const t=today();
-  const notesSummary=data.notes.slice(0,8).map(n=>{
+  const notesSummary=(data.notes||[]).slice(0,8).map(n=>{
     let s=`• ${n.title.slice(0,40)}`;
     if(n.amount)s+=` $${n.amount}`;
     if(n.tags?.length)s+=` [${n.tags.slice(0,2).join(',')}]`;
     return s;
   }).join('\n');
-  const tasksPending=data.tasks.filter(t=>t.status==='todo');
+  const tasksPending=(data.tasks||[]).filter(t=>t.status==='todo');
   const tasksSummary=tasksPending.slice(0,6).map(t=>`• ${t.title.slice(0,40)}${t.deadline?' ('+t.deadline+')':''}`).join('\n');
-  const inboxPending=data.inbox.filter(i=>!i.processed);
-  const habitNames=data.habits.map(h=>h.name).join(', ');
-  const areaNames=data.areas.map(a=>`${a.icon} ${a.name}`).join(', ');
-  const areaMap=data.areas.map(a=>`"${a.name}" → "${a.id}"`).join(', ');
-  const objectives=data.objectives.filter(o=>o.status==='active').map(o=>`• ${o.title}`).join('\n');
-
-  // Collect existing tags for consistency
-  const allTags=[...new Set(data.notes.flatMap(n=>n.tags||[]))].slice(0,15);
+  const inboxPending=(data.inbox||[]).filter(i=>!i.processed);
+  const habitNames=(data.habits||[]).map(h=>h.name).join(', ');
+  const areaNames=(data.areas||[]).map(a=>`${a.icon} ${a.name}`).join(', ');
+  const areaMap=(data.areas||[]).map(a=>`"${a.name}" → "${a.id}"`).join(', ');
+  const objectives=(data.objectives||[]).filter(o=>o.status==='active').map(o=>`• ${o.title}`).join('\n');
+  const allTags=[...new Set((data.notes||[]).flatMap(n=>n.tags||[]))].slice(0,15);
   const tagList=allTags.length?allTags.join(', '):'(sin tags aún)';
+
+  // ── Finanzas ──
+  const recentTx=(data.transactions||[]).slice(0,6).map(tx=>`• ${tx.type==='ingreso'?'↑':'↓'} $${tx.amount} ${tx.currency||'MXN'} — ${tx.category||''} ${tx.description||''}`).join('\n');
+  const budgetSummary=(data.budget||[]).map(b=>`• ${b.title}: $${b.amount} ${b.currency||'MXN'}/mes día ${b.dayOfMonth}`).join('\n');
+
+  // ── Salud ──
+  const recentMetrics=(data.healthMetrics||[]).slice(0,5).map(m=>`• ${m.type}: ${m.value} ${m.unit||''} (${m.date})`).join('\n');
+  const medications=(data.medications||[]).map(m=>`• ${m.name} ${m.dose||''} ${m.unit||''} — ${m.frequency||''}`).join('\n');
+  const recentWorkouts=(data.workouts||[]).slice(0,4).map(w=>`• ${w.type} ${w.duration||''}min ${w.date}`).join('\n');
+
+  // ── Hogar ──
+  const maintenances=(data.maintenances||[]).slice(0,5).map(m=>`• ${m.name} — cada ${m.frequencyDays}d, último: ${m.lastDone||'nunca'}`).join('\n');
+  const homeDocs=(data.homeDocs||[]).slice(0,4).map(d=>`• ${d.name} vence: ${d.expiryDate||'—'}`).join('\n');
+
+  // ── Desarrollo Personal ──
+  const learnings=(data.learnings||[]).filter(l=>l.status==='active').map(l=>`• ${l.name} ${l.progress||0}% — ${l.platform||''}`).join('\n');
+  const recentRetros=(data.retros||[]).slice(0,2).map(r=>`• Retro ${r.period} (${r.date})`).join('\n');
+  const recentIdeas=(data.ideas||[]).slice(0,4).map(i=>`• [${i.tag||'Idea'}] ${i.content.slice(0,50)}`).join('\n');
+  const booksSummary=(data.books||[]).filter(b=>b.status==='reading').map(b=>`• ${b.title}`).join('\n');
+
+  // ── Relaciones ──
+  const peopleSummary=(data.people||[]).map(p=>`• ${p.emoji||'👤'} ${p.name} (${p.relation||''})`).join('\n');
+  const pendingFollowUps=(data.followUps||[]).filter(f=>!f.done).slice(0,5).map(f=>{
+    const person=(data.people||[]).find(p=>p.id===f.personId);
+    return `• ${f.task} → ${person?.name||'?'} ${f.dueDate?'('+f.dueDate+')':''}`;
+  }).join('\n');
+
+  // ── Side Projects ──
+  const activeProjects=(data.sideProjects||[]).filter(p=>p.status==='progress').map(p=>`• ${p.name} — ${p.stack||''}`).join('\n');
+  const spTasksPending=(data.spTasks||[]).filter(t=>!t.done).slice(0,5).map(t=>{
+    const proj=(data.sideProjects||[]).find(p=>p.id===t.projectId);
+    return `• ${t.title} [${proj?.name||'?'}]`;
+  }).join('\n');
 
   return `Eres Psicke — la IA que vive dentro del Segundo Cerebro del usuario. No eres un chatbot genérico; eres SU extensión mental.
 
@@ -1382,217 +1413,265 @@ HOY: ${t}
 
 ═══ TU PERSONALIDAD ═══
 - Directa y sin relleno. Vas al punto.
-- Empática cuando el momento lo amerita — si alguien está overwhelmed o stressed, lo notas y bajas el tono.
-- Tienes humor seco, subtle. No forzado.
-- Hablas principalmente en español. Puedes usar algún anglicismo natural — "eso está heavy", "that's the move".
-- SIEMPRE tratas de USTED. Nunca tutees. Di "usted", "su", "le", nunca "tú" ni "tu".
-- NUNCA digas "como asistente de IA" ni nada corporate. Eres Psicke, punto.
+- Empática cuando el momento lo amerita.
+- Humor seco, subtle. No forzado.
+- Hablas principalmente en español. Puedes usar anglicismos naturales.
+- SIEMPRE tratas de USTED. Nunca tutees.
+- NUNCA digas "como asistente de IA". Eres Psicke, punto.
 
 ═══ DATOS ACTUALES DEL USUARIO ═══
-Áreas: ${areaNames || 'Ninguna'}
-Mapa de áreas (nombre → id): ${areaMap || 'sin áreas'}
+Áreas: ${areaNames||'Ninguna'}
+Mapa de áreas: ${areaMap||'sin áreas'}
 
-Objetivos activos:
-${objectives || '(sin objetivos)'}
+OBJETIVOS ACTIVOS:
+${objectives||'(sin objetivos)'}
 
-Tareas pendientes (${tasksPending.length}):
-${tasksSummary || '(sin tareas)'}
+TAREAS PENDIENTES (${tasksPending.length}):
+${tasksSummary||'(sin tareas)'}
 
-Notas recientes (con montos y tags):
-${notesSummary || '(sin notas)'}
-
+NOTAS RECIENTES:
+${notesSummary||'(sin notas)'}
 Tags existentes: ${tagList}
-Inbox sin procesar: ${inboxPending.length} items
-Hábitos: ${habitNames || '(sin hábitos)'}
+Inbox sin procesar: ${inboxPending.length}
+Hábitos: ${habitNames||'(sin hábitos)'}
 
-Presupuesto fijo (gastos recurrentes):
-${data.budget?.length?data.budget.map(b=>`• ${b.title}: $${b.amount} ${b.currency||'MXN'} — día ${b.dayOfMonth} de cada mes`).join('\n'):'(sin presupuesto aún)'}
+── FINANZAS ──
+Últimas transacciones:
+${recentTx||'(sin transacciones)'}
+Presupuesto fijo:
+${budgetSummary||'(sin presupuesto)'}
+
+── SALUD ──
+Métricas recientes:
+${recentMetrics||'(sin métricas)'}
+Medicamentos:
+${medications||'(sin medicamentos)'}
+Actividad reciente:
+${recentWorkouts||'(sin entrenamientos)'}
+
+── HOGAR ──
+Mantenimientos:
+${maintenances||'(sin mantenimientos)'}
+Documentos:
+${homeDocs||'(sin documentos)'}
+
+── DESARROLLO PERSONAL ──
+Aprendizajes activos:
+${learnings||'(sin aprendizajes)'}
+Libros leyendo:
+${booksSummary||'(ninguno)'}
+Retrospectivas recientes:
+${recentRetros||'(sin retros)'}
+Ideas recientes:
+${recentIdeas||'(sin ideas)'}
+
+── RELACIONES ──
+Personas:
+${peopleSummary||'(sin personas)'}
+Seguimientos pendientes:
+${pendingFollowUps||'(sin seguimientos)'}
+
+── SIDE PROJECTS ──
+En progreso:
+${activeProjects||'(sin proyectos activos)'}
+Tareas pendientes:
+${spTasksPending||'(sin tareas de proyectos)'}
 
 ╔═══════════════════════════════════════════════════╗
 ║   PROTOCOLO DE RAZONAMIENTO INTERNO OBLIGATORIO   ║
-║                                                   ║
-║  FORMATO OBLIGATORIO DE CADA RESPUESTA:           ║
-║  <pensamiento>                                    ║
-║    [razonamiento interno paso a paso]             ║
-║  </pensamiento>                                   ║
-║  [respuesta visible al usuario]                   ║
-║                                                   ║
-║  Las etiquetas <pensamiento> se eliminan          ║
-║  automáticamente — el usuario NO las ve.          ║
-║  SIEMPRE empieza con <pensamiento>.               ║
 ╚═══════════════════════════════════════════════════╝
 
 PASO I — TIPO DE ENTRADA
-¿Qué tipo de mensaje es este?
+  A) CONSULTA → Ir a PASO V
+  B) CAPTURA → Continuar a PASO II
 
-  A) CONSULTA — El usuario pregunta, pide un resumen, o quiere conversar.
-     → Ir directo a PASO V (responder).
+PASO II — ÁREA
+¿A qué área pertenece? Áreas: ${areaNames||'ninguna'}
 
-  B) CAPTURA — El usuario comparte información, quiere guardar algo, o expresa
-     una intención de lograr/hacer algo.
-     → Continuar a PASO II.
+PASO III — MÓDULO ESPECÍFICO
+Identifica el módulo exacto donde guardar:
 
-──────────────────────────────────────────────────────
-PASO II — ÁREA (solo si es CAPTURA)
-¿A qué área de la vida del usuario pertenece esta información?
-Áreas disponibles: ${areaNames || '(sin áreas)'}
+  GENERAL:
+  1. Meta de vida medible → OBJETIVO → PASO IV-PLAN
+  2. Conjunto de acciones con inicio/fin → PROYECTO → PASO IV-PLAN
+  3. Acción única concreta → SAVE_TASK
+  4. Acción recurrente → SAVE_HABIT
+  5. Gasto fijo mensual → SAVE_BUDGET
+  6. Info, dato, referencia → SAVE_NOTE
+  7. Ambiguo → SAVE_INBOX
 
-  → Mapea mentalmente la captura a un área existente.
-  → Si no encaja claramente en ninguna, marca areaId = "".
-  → Continuar a PASO III.
+  FINANZAS:
+  8. Gasto/ingreso único → SAVE_TRANSACTION
+     (type: "egreso"|"ingreso", amount, currency, category, description, date)
+     Categorías egreso: Alimentación, Transporte, Salud, Educación, Entretenimiento, Hogar, Ropa, Servicios, Deuda, Otro
+     Categorías ingreso: Salario, Freelance, Negocio, Inversión, Regalo, Otro
 
-──────────────────────────────────────────────────────
-PASO III — NIVEL JERÁRQUICO (método Tiago Forte)
-¿Dónde encaja esta captura dentro de la jerarquía?
+  SALUD:
+  9. Medición corporal (peso, presión, glucosa, sueño, pasos, agua) → SAVE_HEALTH_METRIC
+     (type, value, unit, date, notes)
+  10. Nuevo medicamento o suplemento → SAVE_MEDICATION
+      (name, dose, unit, frequency, time, stock)
+  11. Ejercicio o actividad física → SAVE_WORKOUT
+      (type, duration, calories, distance, date, notes)
+      Tipos: Correr, Caminar, Ciclismo, Natación, Gym, Yoga, HIIT, Fútbol, Basquetbol, Otro
 
-  1. ¿Es una META DE VIDA con resultado medible y fecha límite?
-     → Nivel: OBJETIVO
-     → Ejemplos: "quiero bajar 5kg", "lograr $50k de ingreso mensual", "aprender inglés"
-     → Ir a PASO IV-PLAN
+  HOGAR:
+  12. Tarea de mantenimiento recurrente → SAVE_MAINTENANCE
+      (name, category, frequencyDays, lastDone, cost, notes)
+      Categorías: General, Coche, Jardín, Plomería, Electricidad, Climatización, Electrodomésticos, Otro
+  13. Documento, garantía, seguro, contrato → SAVE_HOME_DOC
+      (name, category, expiryDate, provider, annualCost, notes)
+      Categorías: Seguro, Garantía, Contrato, Escritura, Impuesto, Membresía, Suscripción, Otro
+  14. Contacto de servicio (plomero, médico, etc.) → SAVE_HOME_CONTACT
+      (name, role, phone, email, notes)
+      Roles: Plomero, Electricista, Médico, Dentista, Veterinario, Mecánico, Abogado, Contador, Jardinero, Limpieza, Cerrajero, Otro
 
-  2. ¿Es un CONJUNTO DE ACCIONES con inicio y fin para lograr algo?
-     → Nivel: PROYECTO
-     → Ejemplos: "renovar la cocina", "lanzar el sitio web", "preparar la presentación"
-     → Ir a PASO IV-PLAN
+  DESARROLLO PERSONAL:
+  15. Curso, habilidad o tema de estudio → SAVE_LEARNING
+      (name, platform, category, progress, hoursSpent, hoursTotal, notes)
+  16. Reflexión periódica (semanal/mensual) → SAVE_RETRO
+      (period, date, wentWell, improve, learned)
+  17. Idea, insight, cita, aprendizaje suelto → SAVE_IDEA
+      (content, tag, date)
+      Tags: Insight, Cita, Aprendizaje, Pregunta, Idea, Reflexión, Otro
 
-  3. ¿Es una ACCIÓN ÚNICA y concreta que debe hacerse?
-     → Nivel: TAREA
-     → Ejemplos: "llamar al mecánico", "pagar la renta", "mandar el reporte"
-     → Acción: SAVE_TASK → Ir a PASO IV-SIMPLE
+  RELACIONES:
+  18. Nueva persona → SAVE_PERSON
+      (name, relation, birthday, emoji, phone, email, notes)
+      Relaciones: Amigo, Familiar, Pareja, Colega, Mentor, Cliente, Conocido, Otro
+  19. Tarea pendiente con alguien → SAVE_FOLLOWUP
+      (personName, task, dueDate, priority)
+      priority: "alta"|"media"|"baja"
+  20. Registro de contacto/interacción → SAVE_INTERACTION
+      (personName, type, date, notes)
+      Tipos: Mensaje, Llamada, Videollamada, Comida, Café, Evento, Email, Visita, Otro
 
-  4. ¿Es una ACCIÓN RECURRENTE que quiere repetir con frecuencia?
-     → Nivel: HÁBITO
-     → Ejemplos: "meditar cada día", "leer 30 min", "hacer ejercicio"
-     → Acción: SAVE_HABIT → Ir a PASO IV-SIMPLE
+  SIDE PROJECTS:
+  21. Nuevo proyecto personal → SAVE_SIDE_PROJECT
+      (name, description, status, stack, url, startDate)
+      status: "idea"|"progress"|"paused"|"launched"|"archived"
+  22. Tarea de un proyecto → SAVE_SP_TASK
+      (projectName, title, priority, dueDate)
+  23. Logro o hito de un proyecto → SAVE_MILESTONE
+      (projectName, title, date, notes)
 
-  5. ¿Es un GASTO FIJO que se repite cada mes?
-     → Nivel: PRESUPUESTO
-     → Ejemplos: "pago mensual de internet $500", "renta $8000 cada 1ro"
-     → Acción: SAVE_BUDGET → Ir a PASO IV-SIMPLE
+PASO IV-PLAN — Para OBJETIVO o PROYECTO grande
+  A) ¿Tengo info suficiente? (meta concreta, plazo, cómo)
+     SÍ → ETAPA C | NO → ETAPA B (1-2 preguntas)
+  C) Confirmar plan con usuario. NO generar JSON todavía.
+  D) Con confirmación → generar SAVE_PLAN
 
-  6. ¿Es INFORMACIÓN, DATO, REGISTRO, GASTO ÚNICO, EXPERIENCIA, APRENDIZAJE o REFERENCIA?
-     → Nivel: NOTA
-     → Ejemplos: gastos, mediciones, ideas, aprendizajes, info de clientes, mantenimientos
-     → Acción: SAVE_NOTE → Ir a PASO IV-SIMPLE
+PASO IV-SIMPLE — Para todo lo demás
+  ¿Tengo todos los datos? SÍ → JSON. NO → 1 pregunta puntual.
+  - Montos: incluir amount + currency SIEMPRE
+  - Fechas: usar formato YYYY-MM-DD
+  - Para FOLLOWUP e INTERACTION: usar el nombre de la persona (no el id)
 
-  7. ¿No encaja en ninguno de los anteriores y es demasiado ambiguo?
-     → Nivel: INBOX (último recurso absoluto)
-     → Acción: SAVE_INBOX → Ir a PASO IV-SIMPLE
-
-──────────────────────────────────────────────────────
-PASO IV-PLAN — FLUJO PARA OBJETIVOS Y PROYECTOS GRANDES
-(Solo aplica si el nivel es OBJETIVO o PROYECTO)
-
-  ETAPA A — ¿Tengo suficiente información para armar un plan completo?
-  Necesito saber: meta concreta (número/resultado), plazo estimado, y cómo piensa lograrlo.
-
-    SÍ tengo todo → Saltar a ETAPA C.
-    NO tengo todo → Ejecutar ETAPA B.
-
-  ETAPA B — INDAGAR (el usuario ve esto)
-  Hacer 1-2 preguntas clave en tono conversacional, no como interrogatorio.
-  Máximo 2 preguntas por mensaje. Esperar respuesta. Volver a ETAPA A.
-
-  ETAPA C — CONFIRMAR (el usuario ve esto)
-  Presentar un resumen breve del plan propuesto y preguntar si le parece bien.
-  NO generar JSON todavía. Esperar confirmación.
-
-  ETAPA D — GENERAR (solo con confirmación explícita del usuario)
-  Generar SAVE_PLAN con: área + objetivo + proyecto + tareas accionables + hábitos recurrentes.
-  → Ir a PASO V.
-
-──────────────────────────────────────────────────────
-PASO IV-SIMPLE — FLUJO PARA CAPTURAS INDIVIDUALES
-(Aplica para TAREA, HÁBITO, PRESUPUESTO, NOTA, INBOX)
-
-  ¿Tengo TODOS los datos necesarios para guardar correctamente?
-
-    SÍ → Generar el JSON correspondiente e ir a PASO V.
-    NO → Hacer UNA pregunta puntual para obtener el dato faltante. Esperar. Volver.
-
-  REGLAS DE CALIDAD antes de generar:
-  - TAGS: Reutilizar tags existentes: ${tagList}. No crear duplicados semánticos.
-  - MONTOS: Si hay cualquier cantidad de dinero → incluir amount + currency siempre.
-  - ÁREA: Usar el id exacto del mapa de áreas. Si no hay match, dejar areaId = "".
-  - TÍTULO: Descriptivo y específico. "Servicio coche 73,000km — $3,400" > "Mantenimiento".
-  - CONTENIDO: Incluir todo el contexto que el usuario dio (cantidades, fechas, lugares, detalles).
-
-──────────────────────────────────────────────────────
-PASO V — RESPONDER AL USUARIO
-Cierra el bloque </pensamiento> y escribe la respuesta visible. Estructura exacta:
-
-  <pensamiento>
-    [todo el razonamiento de los pasos anteriores]
+PASO V — RESPONDER
   </pensamiento>
-  [respuesta conversacional al usuario, máx 2-3 oraciones excepto planes]
-  [bloque JSON si aplica, siempre AL FINAL]
-
-  Reglas:
-  - El texto conversacional va FUERA de <pensamiento>, ANTES del JSON.
-  - JSON de acción SIEMPRE al final, nunca en medio del texto.
-  - Solo UN bloque JSON por mensaje.
-  - NUNCA mencionar ni resumir el proceso interno al usuario.
-  - NUNCA inventar datos que el usuario no proporcionó.
-  - NUNCA tutear. Siempre de usted.
+  [respuesta conversacional, máx 2-3 oraciones]
+  [JSON al final si aplica]
 
 ╔═══════════════════════════════════════════════════╗
 ║              FORMATOS DE GUARDADO                 ║
 ╚═══════════════════════════════════════════════════╝
 
-Nota con monto: \`\`\`json
-{"action":"SAVE_NOTE","data":{"title":"Gas LP coche — 5L","content":"5 litros de gas LP a $10/L. Total: $50","tags":["auto","gastos","combustible"],"area":"Finanzas","amount":50,"currency":"MXN"}}
+Transacción: \`\`\`json
+{"action":"SAVE_TRANSACTION","data":{"type":"egreso","amount":30,"currency":"MXN","category":"Alimentación","description":"Sabritas","date":"${t}"}}
 \`\`\`
 
-Nota sin monto: \`\`\`json
-{"action":"SAVE_NOTE","data":{"title":"Cliente prefiere entregas lunes","content":"El cliente mencionó que prefiere recibir entregas los lunes temprano","tags":["clientes","entregas"],"area":"Trabajo"}}
+Métrica salud: \`\`\`json
+{"action":"SAVE_HEALTH_METRIC","data":{"type":"peso","value":"75.5","unit":"kg","date":"${t}","notes":""}}
 \`\`\`
 
-Tarea: \`\`\`json
-{"action":"SAVE_TASK","data":{"title":"Llamar al mecánico por frenos","priority":"alta"}}
+Workout: \`\`\`json
+{"action":"SAVE_WORKOUT","data":{"type":"Correr","duration":30,"calories":280,"distance":4.5,"date":"${t}","notes":"En el parque"}}
+\`\`\`
+
+Medicamento: \`\`\`json
+{"action":"SAVE_MEDICATION","data":{"name":"Vitamina D","dose":"1000","unit":"UI","frequency":"daily","time":"08:00","stock":30}}
+\`\`\`
+
+Mantenimiento hogar: \`\`\`json
+{"action":"SAVE_MAINTENANCE","data":{"name":"Cambio de aceite","category":"Coche","frequencyDays":90,"lastDone":"${t}","cost":800,"notes":""}}
+\`\`\`
+
+Documento hogar: \`\`\`json
+{"action":"SAVE_HOME_DOC","data":{"name":"Seguro del coche","category":"Seguro","expiryDate":"2026-12-01","provider":"GNP","annualCost":6500,"notes":""}}
+\`\`\`
+
+Contacto hogar: \`\`\`json
+{"action":"SAVE_HOME_CONTACT","data":{"name":"Carlos Flores","role":"Plomero","phone":"5512345678","email":"","notes":"Trabaja fines de semana"}}
+\`\`\`
+
+Aprendizaje: \`\`\`json
+{"action":"SAVE_LEARNING","data":{"name":"React avanzado","platform":"Udemy","category":"Programación","progress":30,"hoursSpent":8,"hoursTotal":40,"notes":""}}
+\`\`\`
+
+Retro: \`\`\`json
+{"action":"SAVE_RETRO","data":{"period":"semanal","date":"${t}","wentWell":"Terminé el módulo 3","improve":"Procrastinar menos","learned":"Los hooks son más simples de lo que pensaba"}}
+\`\`\`
+
+Idea: \`\`\`json
+{"action":"SAVE_IDEA","data":{"content":"El foco no es la motivación, es el sistema","tag":"Cita","date":"${t}"}}
+\`\`\`
+
+Persona: \`\`\`json
+{"action":"SAVE_PERSON","data":{"name":"María López","relation":"Mentor","birthday":"1985-03-15","emoji":"👩","phone":"5598765432","email":"maria@mail.com","notes":"Experta en finanzas"}}
+\`\`\`
+
+Seguimiento: \`\`\`json
+{"action":"SAVE_FOLLOWUP","data":{"personName":"María López","task":"Enviarle el reporte de avance","dueDate":"${t}","priority":"alta"}}
+\`\`\`
+
+Interacción: \`\`\`json
+{"action":"SAVE_INTERACTION","data":{"personName":"María López","type":"Llamada","date":"${t}","notes":"Hablamos de la propuesta de inversión"}}
+\`\`\`
+
+Side project: \`\`\`json
+{"action":"SAVE_SIDE_PROJECT","data":{"name":"App de hábitos","description":"Tracker minimalista para hábitos diarios","status":"progress","stack":"React Native","url":"","startDate":"${t}"}}
+\`\`\`
+
+Tarea de proyecto: \`\`\`json
+{"action":"SAVE_SP_TASK","data":{"projectName":"App de hábitos","title":"Diseñar pantalla principal","priority":"alta","dueDate":""}}
+\`\`\`
+
+Hito: \`\`\`json
+{"action":"SAVE_MILESTONE","data":{"projectName":"App de hábitos","title":"MVP funcional listo","date":"${t}","notes":"Primera versión con las 3 pantallas principales"}}
+\`\`\`
+
+Tarea general: \`\`\`json
+{"action":"SAVE_TASK","data":{"title":"Llamar al mecánico","priority":"alta"}}
 \`\`\`
 
 Hábito: \`\`\`json
 {"action":"SAVE_HABIT","data":{"name":"Caminar 30 min","frequency":"daily"}}
 \`\`\`
 
-Presupuesto: \`\`\`json
-{"action":"SAVE_BUDGET","data":{"title":"Escuela","amount":1500,"currency":"MXN","dayOfMonth":9,"area":"Finanzas"}}
+Presupuesto fijo: \`\`\`json
+{"action":"SAVE_BUDGET","data":{"title":"Netflix","amount":199,"currency":"MXN","dayOfMonth":15}}
 \`\`\`
 
-Inbox (solo si es genuinamente ambiguo): \`\`\`json
-{"action":"SAVE_INBOX","data":{"content":"captura rápida"}}
+Nota: \`\`\`json
+{"action":"SAVE_NOTE","data":{"title":"Reunión con cliente — puntos clave","content":"El cliente quiere entrega antes del viernes","tags":["clientes","trabajo"],"area":"Trabajo"}}
 \`\`\`
 
 Plan completo (solo tras confirmación): \`\`\`json
 {"action":"SAVE_PLAN","data":{
   "area":"Salud",
   "objective":{"title":"Bajar 5kg","deadline":"2026-06-01"},
-  "project":{"title":"Plan fitness y alimentación"},
-  "tasks":[
-    {"title":"Investigar dieta balanceada","priority":"alta"},
-    {"title":"Armar menú semanal","priority":"alta"},
-    {"title":"Inscribirme al gym","priority":"media"},
-    {"title":"Comprar báscula","priority":"baja"}
-  ],
-  "habits":[
-    {"name":"Ejercicio 30 min","frequency":"daily"},
-    {"name":"Tomar 2L de agua","frequency":"daily"},
-    {"name":"Pesarme","frequency":"weekly"}
-  ]
+  "project":{"title":"Plan fitness"},
+  "tasks":[{"title":"Inscribirme al gym","priority":"alta"}],
+  "habits":[{"name":"Ejercicio 30 min","frequency":"daily"}]
 }}
 \`\`\`
 
-Reglas del plan:
-- "area" debe ser una de: ${areaNames || '(sin áreas)'}
-- Tareas: 3-8, accionables y concretas.
-- Hábitos: 1-4, acciones recurrentes reales.
-- NUNCA generar sin confirmación explícita del usuario.
-
 ═══ CONSULTAS SOBRE DATOS ═══
-Si el usuario pregunta por gastos, notas, tareas, hábitos o cualquier dato:
-- Responder con números concretos tomados de los datos actuales.
-- Si hay montos, sumar y presentar el total claramente.
-- Agrupar por tags o área cuando sea relevante.`;
+Si el usuario pregunta por gastos, salud, hábitos, proyectos, personas, etc:
+- Responder con números concretos de los datos actuales.
+- Sumar montos cuando sea relevante.
+- Comparar períodos si hay historial.
+- Agrupar por categoría/área cuando ayude.`;
 };
 
 const parsePsickeAction=(text)=>{
@@ -1752,72 +1831,224 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
 
       if(action&&setData){
         const td=today();
-        if(action.action==='SAVE_PLAN'&&action.data.objective){
-          // Create full connected plan: area match → objective → project → tasks + habits
-          const plan=action.data;
-          const matchedArea=data.areas.find(a=>a.name.toLowerCase()===plan.area?.toLowerCase());
-          const areaId=matchedArea?.id||'';
 
+        // ── Helper: resolve personId by name ──
+        const resolvePersonId=(name)=>{
+          if(!name) return '';
+          const p=(data.people||[]).find(p=>p.name.toLowerCase()===name.toLowerCase());
+          return p?.id||'';
+        };
+
+        // ── SAVE_PLAN ──
+        if(action.action==='SAVE_PLAN'&&action.data.objective){
+          const plan=action.data;
+          const matchedArea=(data.areas||[]).find(a=>a.name.toLowerCase()===plan.area?.toLowerCase());
+          const areaId=matchedArea?.id||'';
           const objId=uid();
           const newObj={id:objId,title:plan.objective.title,areaId,deadline:plan.objective.deadline||'',status:'active'};
-
           const projId=uid();
           const newProj={id:projId,title:plan.project?.title||plan.objective.title,objectiveId:objId,areaId,status:'active'};
-
           const newTasks=(plan.tasks||[]).map(t=>({id:uid(),title:t.title,projectId:projId,status:'todo',priority:t.priority||'media',dueDate:t.dueDate||''}));
-
           const newHabits=(plan.habits||[]).map(h=>({id:uid(),name:h.name,frequency:h.frequency||'daily',completions:[]}));
-
-          const updObj=[newObj,...data.objectives];
-          const updProj=[newProj,...data.projects];
-          const updTasks=[...newTasks,...data.tasks];
-          const updHabits=[...newHabits,...data.habits];
-
+          const updObj=[newObj,...(data.objectives||[])];
+          const updProj=[newProj,...(data.projects||[])];
+          const updTasks=[...newTasks,...(data.tasks||[])];
+          const updHabits=[...(data.habits||[]),...newHabits];
           setData(d=>({...d,objectives:updObj,projects:updProj,tasks:updTasks,habits:updHabits}));
           save('objectives',updObj);save('projects',updProj);save('tasks',updTasks);save('habits',updHabits);
+          savedLabel=`🗺️ Plan creado · 🎯 ${newObj.title} · 📋 ${newTasks.length} tareas${newHabits.length?' · 🔁 '+newHabits.length+' hábitos':''}`;
 
-          const summary=[];
-          summary.push(`🎯 Objetivo: ${newObj.title}`);
-          summary.push(`📁 Proyecto: ${newProj.title}`);
-          summary.push(`📋 ${newTasks.length} tareas`);
-          if(newHabits.length)summary.push(`🔁 ${newHabits.length} hábitos`);
-          savedLabel='🗺️ Plan creado\n'+summary.join(' · ');
+        // ── SAVE_TASK ──
         }else if(action.action==='SAVE_TASK'&&action.data.title){
-          const t={id:uid(),title:action.data.title,projectId:'',status:'todo',deadline:action.data.deadline||''};
-          const upd=[t,...data.tasks];
+          const t={id:uid(),title:action.data.title,projectId:'',status:'todo',priority:action.data.priority||'media',deadline:action.data.deadline||''};
+          const upd=[t,...(data.tasks||[])];
           setData(d=>({...d,tasks:upd}));save('tasks',upd);
           savedLabel='📋 Tarea guardada';
+
+        // ── SAVE_NOTE ──
         }else if(action.action==='SAVE_NOTE'&&action.data.title){
-          // Resolve areaId: use explicit id, or match by name, or leave empty
-          let resolvedAreaId = action.data.areaId || '';
-          if(!resolvedAreaId && action.data.area){
-            const match = data.areas.find(a=>a.name.toLowerCase()===action.data.area?.toLowerCase());
-            resolvedAreaId = match?.id || '';
+          let resolvedAreaId=action.data.areaId||'';
+          if(!resolvedAreaId&&action.data.area){
+            const match=(data.areas||[]).find(a=>a.name.toLowerCase()===action.data.area?.toLowerCase());
+            resolvedAreaId=match?.id||'';
           }
-          const areaLabel = resolvedAreaId ? data.areas.find(a=>a.id===resolvedAreaId) : null;
+          const areaLabel=resolvedAreaId?(data.areas||[]).find(a=>a.id===resolvedAreaId):null;
           const n={id:uid(),title:action.data.title,content:action.data.content||'',tags:action.data.tags||[],areaId:resolvedAreaId,createdAt:td,
             ...(action.data.amount?{amount:Number(action.data.amount),currency:action.data.currency||'MXN'}:{})};
-          const upd=[n,...data.notes];
+          const upd=[n,...(data.notes||[])];
           setData(d=>({...d,notes:upd}));save('notes',upd);
-          const amountStr=n.amount?` · 💰 $${n.amount} ${n.currency||''}`:'';
-          savedLabel=`📝 Nota guardada${areaLabel?` · ${areaLabel.icon} ${areaLabel.name}`:''}${amountStr}`;
+          savedLabel=`📝 Nota guardada${areaLabel?` · ${areaLabel.icon} ${areaLabel.name}`:''}${n.amount?` · 💰 $${n.amount} ${n.currency}`:''}`;
+
+        // ── SAVE_INBOX ──
         }else if(action.action==='SAVE_INBOX'&&action.data.content){
           const i={id:uid(),content:action.data.content,createdAt:td,processed:false};
-          const upd=[i,...data.inbox];
+          const upd=[i,...(data.inbox||[])];
           setData(d=>({...d,inbox:upd}));save('inbox',upd);
           savedLabel='📥 Agregado al inbox';
+
+        // ── SAVE_BUDGET ──
         }else if(action.action==='SAVE_BUDGET'&&action.data.title){
-          const b={id:uid(),title:action.data.title,amount:Number(action.data.amount)||0,currency:action.data.currency||'MXN',dayOfMonth:Number(action.data.dayOfMonth)||1,
-            areaId:(()=>{if(action.data.areaId)return action.data.areaId;if(action.data.area){const m=data.areas.find(a=>a.name.toLowerCase()===action.data.area.toLowerCase());return m?.id||'';}return '';})(),
+          const b={id:uid(),title:action.data.title,amount:Number(action.data.amount)||0,currency:action.data.currency||'MXN',
+            dayOfMonth:Number(action.data.dayOfMonth)||1,
+            areaId:(()=>{if(action.data.areaId)return action.data.areaId;if(action.data.area){const m=(data.areas||[]).find(a=>a.name.toLowerCase()===action.data.area.toLowerCase());return m?.id||'';}return '';})(),
             createdAt:td};
           const upd=[b,...(data.budget||[])];
           setData(d=>({...d,budget:upd}));save('budget',upd);
-          savedLabel=`💳 Presupuesto: ${b.title} — $${b.amount}/mes (día ${b.dayOfMonth})`;
+          savedLabel=`💳 Presupuesto: ${b.title} — $${b.amount} ${b.currency}/mes (día ${b.dayOfMonth})`;
+
+        // ── SAVE_HABIT ──
         }else if(action.action==='SAVE_HABIT'&&action.data.name){
           const h={id:uid(),name:action.data.name,frequency:action.data.frequency||'daily',completions:[]};
-          const upd=[...data.habits,h];
+          const upd=[...(data.habits||[]),h];
           setData(d=>({...d,habits:upd}));save('habits',upd);
           savedLabel=`🔁 Hábito creado: ${h.name}`;
+
+        // ── SAVE_TRANSACTION ──
+        }else if(action.action==='SAVE_TRANSACTION'&&action.data.amount){
+          const tx={id:uid(),type:action.data.type||'egreso',amount:Number(action.data.amount)||0,
+            currency:action.data.currency||'MXN',category:action.data.category||'Otro',
+            description:action.data.description||'',date:action.data.date||td,createdAt:td};
+          const upd=[tx,...(data.transactions||[])];
+          setData(d=>({...d,transactions:upd}));save('transactions',upd);
+          savedLabel=`💸 ${tx.type==='ingreso'?'Ingreso':'Gasto'}: $${tx.amount} ${tx.currency} — ${tx.category}${tx.description?' ('+tx.description+')':''}`;
+
+        // ── SAVE_HEALTH_METRIC ──
+        }else if(action.action==='SAVE_HEALTH_METRIC'&&action.data.type){
+          const m={id:uid(),type:action.data.type,value:action.data.value,unit:action.data.unit||'',
+            date:action.data.date||td,notes:action.data.notes||'',createdAt:td};
+          const upd=[m,...(data.healthMetrics||[])];
+          setData(d=>({...d,healthMetrics:upd}));save('healthMetrics',upd);
+          savedLabel=`📊 Métrica: ${m.type} — ${m.value} ${m.unit}`;
+
+        // ── SAVE_WORKOUT ──
+        }else if(action.action==='SAVE_WORKOUT'&&action.data.type){
+          const w={id:uid(),type:action.data.type,duration:Number(action.data.duration)||0,
+            calories:Number(action.data.calories)||0,distance:Number(action.data.distance)||0,
+            date:action.data.date||td,notes:action.data.notes||'',createdAt:td};
+          const upd=[w,...(data.workouts||[])];
+          setData(d=>({...d,workouts:upd}));save('workouts',upd);
+          savedLabel=`🏃 Workout: ${w.type} ${w.duration}min${w.calories?' · '+w.calories+'kcal':''}`;
+
+        // ── SAVE_MEDICATION ──
+        }else if(action.action==='SAVE_MEDICATION'&&action.data.name){
+          const m={id:uid(),name:action.data.name,dose:action.data.dose||'',unit:action.data.unit||'',
+            frequency:action.data.frequency||'daily',time:action.data.time||'',
+            stock:Number(action.data.stock)||0,createdAt:td};
+          const upd=[m,...(data.medications||[])];
+          setData(d=>({...d,medications:upd}));save('medications',upd);
+          savedLabel=`💊 Medicamento: ${m.name} ${m.dose} ${m.unit}`;
+
+        // ── SAVE_MAINTENANCE ──
+        }else if(action.action==='SAVE_MAINTENANCE'&&action.data.name){
+          const m={id:uid(),name:action.data.name,category:action.data.category||'General',
+            frequencyDays:Number(action.data.frequencyDays)||30,lastDone:action.data.lastDone||td,
+            cost:Number(action.data.cost)||0,notes:action.data.notes||'',createdAt:td};
+          const upd=[m,...(data.maintenances||[])];
+          setData(d=>({...d,maintenances:upd}));save('maintenances',upd);
+          savedLabel=`🔧 Mantenimiento: ${m.name} — cada ${m.frequencyDays}d`;
+
+        // ── SAVE_HOME_DOC ──
+        }else if(action.action==='SAVE_HOME_DOC'&&action.data.name){
+          const d2={id:uid(),name:action.data.name,category:action.data.category||'Otro',
+            expiryDate:action.data.expiryDate||'',provider:action.data.provider||'',
+            annualCost:Number(action.data.annualCost)||0,notes:action.data.notes||'',createdAt:td};
+          const upd=[d2,...(data.homeDocs||[])];
+          setData(d=>({...d,homeDocs:upd}));save('homeDocs',upd);
+          savedLabel=`📄 Documento: ${d2.name}${d2.expiryDate?' · vence '+d2.expiryDate:''}`;
+
+        // ── SAVE_HOME_CONTACT ──
+        }else if(action.action==='SAVE_HOME_CONTACT'&&action.data.name){
+          const c={id:uid(),name:action.data.name,role:action.data.role||'Otro',
+            phone:action.data.phone||'',email:action.data.email||'',
+            notes:action.data.notes||'',createdAt:td};
+          const upd=[c,...(data.homeContacts||[])];
+          setData(d=>({...d,homeContacts:upd}));save('homeContacts',upd);
+          savedLabel=`📞 Contacto: ${c.name} (${c.role})`;
+
+        // ── SAVE_LEARNING ──
+        }else if(action.action==='SAVE_LEARNING'&&action.data.name){
+          const l={id:uid(),name:action.data.name,platform:action.data.platform||'',
+            category:action.data.category||'',progress:Number(action.data.progress)||0,
+            hoursSpent:Number(action.data.hoursSpent)||0,hoursTotal:Number(action.data.hoursTotal)||0,
+            status:'active',notes:action.data.notes||'',createdAt:td};
+          const upd=[l,...(data.learnings||[])];
+          setData(d=>({...d,learnings:upd}));save('learnings',upd);
+          savedLabel=`📖 Aprendizaje: ${l.name}${l.platform?' en '+l.platform:''} (${l.progress}%)`;
+
+        // ── SAVE_RETRO ──
+        }else if(action.action==='SAVE_RETRO'&&(action.data.wentWell||action.data.learned)){
+          const r={id:uid(),period:action.data.period||'semanal',date:action.data.date||td,
+            wentWell:action.data.wentWell||'',improve:action.data.improve||'',
+            learned:action.data.learned||'',createdAt:td};
+          const upd=[r,...(data.retros||[])];
+          setData(d=>({...d,retros:upd}));save('retros',upd);
+          savedLabel=`🔄 Retrospectiva ${r.period} guardada`;
+
+        // ── SAVE_IDEA ──
+        }else if(action.action==='SAVE_IDEA'&&action.data.content){
+          const i={id:uid(),content:action.data.content,tag:action.data.tag||'Idea',
+            date:action.data.date||td,createdAt:td};
+          const upd=[i,...(data.ideas||[])];
+          setData(d=>({...d,ideas:upd}));save('ideas',upd);
+          savedLabel=`💡 Idea guardada: [${i.tag}]`;
+
+        // ── SAVE_PERSON ──
+        }else if(action.action==='SAVE_PERSON'&&action.data.name){
+          const p={id:uid(),name:action.data.name,relation:action.data.relation||'',
+            birthday:action.data.birthday||'',emoji:action.data.emoji||'👤',
+            phone:action.data.phone||'',email:action.data.email||'',
+            notes:action.data.notes||'',createdAt:td};
+          const upd=[p,...(data.people||[])];
+          setData(d=>({...d,people:upd}));save('people',upd);
+          savedLabel=`👤 Persona: ${p.emoji} ${p.name}${p.relation?' ('+p.relation+')':''}`;
+
+        // ── SAVE_FOLLOWUP ──
+        }else if(action.action==='SAVE_FOLLOWUP'&&action.data.task){
+          const personId=resolvePersonId(action.data.personName);
+          const f={id:uid(),personId,task:action.data.task,
+            dueDate:action.data.dueDate||'',priority:action.data.priority||'media',
+            done:false,createdAt:td};
+          const upd=[f,...(data.followUps||[])];
+          setData(d=>({...d,followUps:upd}));save('followUps',upd);
+          savedLabel=`📋 Seguimiento: "${f.task}"${action.data.personName?' con '+action.data.personName:''}`;
+
+        // ── SAVE_INTERACTION ──
+        }else if(action.action==='SAVE_INTERACTION'&&action.data.personName){
+          const personId=resolvePersonId(action.data.personName);
+          const i={id:uid(),personId,type:action.data.type||'Otro',
+            date:action.data.date||td,notes:action.data.notes||'',createdAt:td};
+          const upd=[i,...(data.interactions||[])];
+          setData(d=>({...d,interactions:upd}));save('interactions',upd);
+          savedLabel=`💬 Contacto: ${action.data.type||'Interacción'} con ${action.data.personName}`;
+
+        // ── SAVE_SIDE_PROJECT ──
+        }else if(action.action==='SAVE_SIDE_PROJECT'&&action.data.name){
+          const p={id:uid(),name:action.data.name,description:action.data.description||'',
+            status:action.data.status||'idea',stack:action.data.stack||'',
+            url:action.data.url||'',startDate:action.data.startDate||td,
+            color:T.areaColors[Math.floor(Math.random()*T.areaColors.length)],createdAt:td};
+          const upd=[p,...(data.sideProjects||[])];
+          setData(d=>({...d,sideProjects:upd}));save('sideProjects',upd);
+          savedLabel=`🚀 Proyecto: ${p.name} [${p.status}]`;
+
+        // ── SAVE_SP_TASK ──
+        }else if(action.action==='SAVE_SP_TASK'&&action.data.title){
+          const proj=(data.sideProjects||[]).find(p=>p.name.toLowerCase()===action.data.projectName?.toLowerCase());
+          const t={id:uid(),projectId:proj?.id||'',title:action.data.title,
+            priority:action.data.priority||'media',dueDate:action.data.dueDate||'',
+            done:false,createdAt:td};
+          const upd=[t,...(data.spTasks||[])];
+          setData(d=>({...d,spTasks:upd}));save('spTasks',upd);
+          savedLabel=`✅ Tarea: "${t.title}"${proj?' en '+proj.name:''}`;
+
+        // ── SAVE_MILESTONE ──
+        }else if(action.action==='SAVE_MILESTONE'&&action.data.title){
+          const proj=(data.sideProjects||[]).find(p=>p.name.toLowerCase()===action.data.projectName?.toLowerCase());
+          const m={id:uid(),projectId:proj?.id||'',title:action.data.title,
+            date:action.data.date||td,notes:action.data.notes||'',createdAt:td};
+          const upd=[m,...(data.milestones||[])];
+          setData(d=>({...d,milestones:upd}));save('milestones',upd);
+          savedLabel=`🏆 Hito: "${m.title}"${proj?' en '+proj.name:''}`;
         }
       }
 
