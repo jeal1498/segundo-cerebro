@@ -1870,8 +1870,8 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
               <div style={{width:36,height:4,background:T.border,borderRadius:2,margin:'0 auto 14px'}}/>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
                 <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:34,height:34,borderRadius:10,background:`linear-gradient(135deg,${T.accent},${T.orange})`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                    <Icon name="brain" size={17} color="#000"/>
+                  <div style={{width:34,height:34,borderRadius:10,background:`linear-gradient(135deg,${T.accent},${T.orange})`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:20}}>
+                    🧠
                   </div>
                   <div>
                     <div style={{color:T.text,fontWeight:700,fontSize:15,fontFamily:"'Playfair Display',serif",lineHeight:1}}>Psicke</div>
@@ -1901,8 +1901,8 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
                 return(
                   <div key={i} style={{display:'flex',flexDirection:'column',alignItems:isUser?'flex-end':'flex-start'}}>
                     <div style={{display:'flex',justifyContent:isUser?'flex-end':'flex-start',alignItems:'flex-end',gap:6}}>
-                      {!isUser&&<div style={{width:24,height:24,borderRadius:7,background:`${T.accent}22`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginBottom:2}}>
-                        <Icon name="brain" size={12} color={T.accent}/>
+                      {!isUser&&<div style={{width:24,height:24,borderRadius:7,background:`${T.accent}22`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginBottom:2,fontSize:14}}>
+                        🧠
                       </div>}
                       {isUser&&isEditing?(
                         <div style={{maxWidth:'82%',display:'flex',flexDirection:'column',gap:6}}>
@@ -1983,8 +1983,8 @@ const Psicke=({apiKey,onGoSettings,data,setData})=>{
               })}
               {loading&&(
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{width:24,height:24,borderRadius:7,background:`${T.accent}22`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                    <Icon name="brain" size={12} color={T.accent}/>
+                  <div style={{width:24,height:24,borderRadius:7,background:`${T.accent}22`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:14}}>
+                    🧠
                   </div>
                   <div style={{padding:'9px 14px',borderRadius:13,borderBottomLeftRadius:2,background:T.surface2,border:`1px solid ${T.border}`,display:'flex',gap:4,alignItems:'center'}}>
                     {[0,1,2].map(i=><span key={i} style={{width:6,height:6,borderRadius:'50%',background:T.accent,display:'inline-block',animation:`psicke-dot 0.9s ${i*0.18}s ease-in-out infinite`}}/>)}
