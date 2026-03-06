@@ -408,6 +408,12 @@ const GlobalSearch = ({data,onNavigate,onClose}) => {
     libro:{label:'📚 Libro',color:'#00c896',nav:'books'},
     aprendizaje:{label:'🎓 Aprendizaje',color:'#a78bfa',nav:'desarrollo'},
     idea:{label:'💡 Idea',color:'#ffd166',nav:'desarrollo'},
+    mantenimiento:{label:'🔧 Mantenimiento',color:'#4da6ff',nav:'hogar'},
+    documento:{label:'📄 Documento',color:'#ff8c42',nav:'hogar'},
+    contacto_hogar:{label:'📞 Contacto',color:'#00c896',nav:'hogar'},
+    side_project:{label:'🚀 Side Project',color:'#ff5069',nav:'sideProjects'},
+    sp_tarea:{label:'📌 SP Tarea',color:'#ff8c42',nav:'sideProjects'},
+    compra:{label:'🛒 Compra',color:'#ffd166',nav:'shopping'},
   };
 
   const ql=q.toLowerCase().trim();
@@ -441,6 +447,12 @@ const GlobalSearch = ({data,onNavigate,onClose}) => {
     (data.books||[]).forEach(b=>push('libro',b.title,b.author||'','books'));
     (data.learnings||[]).forEach(l=>push('aprendizaje',l.title,l.platform||'','desarrollo'));
     (data.ideas||[]).forEach(i=>push('idea',i.content.slice(0,60),i.tag||'','desarrollo'));
+    (data.maintenances||[]).forEach(m=>push('mantenimiento',m.name,m.category||'','hogar',m.notes||''));
+    (data.homeDocs||[]).forEach(d=>push('documento',d.name,d.category||'','hogar',d.provider||''));
+    (data.homeContacts||[]).forEach(c=>push('contacto_hogar',c.name,c.role||'','hogar',c.phone||''));
+    (data.sideProjects||[]).forEach(p=>push('side_project',p.name,p.description?.slice(0,60)||p.stack||'','sideProjects',p.url||''));
+    (data.spTasks||[]).forEach(t=>push('sp_tarea',t.title,t.projectName||'','sideProjects',t.status||''));
+    (data.shopping||[]).forEach(s=>push('compra',s.name,s.category||'','shopping',s.notes||''));
     return res;
   };
 
@@ -823,6 +835,47 @@ const Dashboard = ({data,setData,isMobile,onNavigate}) => {
             })}
             {data.notes.length===0&&<div style={{color:T.dim,fontSize:12,textAlign:'center',padding:'12px 0'}}>Sin notas aún</div>}
           </Card>
+
+          {/* Revisión semanal */}
+          {(()=>{
+            const weekStart=new Date();weekStart.setDate(weekStart.getDate()-weekStart.getDay());
+            const weekStr=weekStart.toISOString().slice(0,10);
+            const weekTasks=data.tasks.filter(t=>t.createdAt>=weekStr||t.dueDate>=weekStr);
+            const weekDone=weekTasks.filter(t=>t.status==='done');
+            const weekHabits=data.habits.filter(h=>h.frequency==='daily');
+            const weekHabitDays=weekHabits.length?weekHabits.reduce((s,h)=>{
+              const d=Array.from({length:7},(_,i)=>{const dd=new Date(weekStart);dd.setDate(dd.getDate()+i);return dd.toISOString().slice(0,10);});
+              return s+d.filter(d=>h.completions.includes(d)).length;
+            },0):0;
+            const weekHabitTotal=weekHabits.length*7;
+            const habitPctWeek=weekHabitTotal>0?Math.round(weekHabitDays/weekHabitTotal*100):0;
+            const overdueCount=data.tasks.filter(t=>t.status!=='done'&&t.dueDate&&t.dueDate<todayStr).length;
+            return (
+              <Card style={{marginTop:14,padding:16,borderLeft:`3px solid ${T.purple}`}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                  <div style={{fontWeight:700,fontSize:13,color:T.purple}}>📊 Revisión semanal</div>
+                  <div style={{display:'flex',gap:6}}>
+                    <button onClick={()=>onNavigate&&onNavigate('settings','revision')} style={{background:`${T.purple}15`,border:`1px solid ${T.purple}40`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.purple,fontSize:11,fontFamily:'inherit',fontWeight:600}}>Iniciar →</button>
+                    <button onClick={()=>onNavigate&&onNavigate('desarrollo',null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>Retro →</button>
+                  </div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {[
+                    {label:'Tareas completadas',val:`${weekDone.length}/${weekTasks.length}`,color:T.accent,icon:'✅'},
+                    {label:'Consistencia hábitos',val:`${habitPctWeek}%`,color:habitPctWeek>=70?T.green:habitPctWeek>=40?T.orange:T.red,icon:'🔥'},
+                    {label:'Tareas vencidas',val:overdueCount,color:overdueCount===0?T.green:T.red,icon:'⚠️'},
+                    {label:'Objetivos activos',val:activeObj.length,color:T.orange,icon:'🎯'},
+                  ].map(s=>(
+                    <div key={s.label} style={{background:T.surface2,borderRadius:10,padding:'10px 12px'}}>
+                      <div style={{fontSize:15}}>{s.icon}</div>
+                      <div style={{fontSize:17,fontWeight:800,color:s.color,marginTop:2}}>{s.val}</div>
+                      <div style={{fontSize:10,color:T.dim,marginTop:1,lineHeight:1.2}}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -1054,7 +1107,7 @@ const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
     setData(d=>({...d,objectives:updated}));save('objectives',updated);
     setModal(false);toast.success('Objetivo guardado');setForm({title:'',areaId:areaFilter||'',deadline:'',status:'active'});
   };
-  const toggle=(id)=>{const u=data.objectives.map(o=>o.id===id?{...o,status:o.status==='active'?'done':'active'}:o);setData(d=>({...d,objectives:u}));save('objectives',u);};
+  const toggle=(id)=>{const u=data.objectives.map(o=>o.id===id?{...o,status:o.status==='active'?'done':'active',completedAt:o.status==='active'?today():null}:o);setData(d=>({...d,objectives:u}));save('objectives',u);};
   const del=(id)=>{const u=data.objectives.filter(o=>o.id!==id);setData(d=>({...d,objectives:u}));save('objectives',u);if(selected===id)setSelected(null);};
 
   // Milestones
@@ -1183,6 +1236,7 @@ const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
                             <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
                               {area&&<Tag text={`${area.icon} ${area.name}`} color={area.color}/>}
                               {o.deadline&&<span style={{color:isOverdue?T.red:dl&&dl<=7?T.orange:T.muted,fontSize:12,fontWeight:isOverdue||dl<=7?600:400}}>{isOverdue?'⚠️ Vencido: ':dl&&dl<=7?`⏰ ${dl}d: `:'📅 '}{fmt(o.deadline)}</span>}
+                              {status==='done'&&o.completedAt&&<span style={{color:T.green,fontSize:12,fontWeight:600}}>✅ Completado {fmt(o.completedAt)}</span>}
                               <span onClick={e=>{e.stopPropagation();onNavigate&&onNavigate('projects',`obj:${o.id}`);}}
                                 style={{color:T.blue,fontSize:12,fontWeight:600,cursor:'pointer'}}>
                                 📁 {data.projects.filter(p=>p.objectiveId===o.id).length} proyectos →
@@ -2652,7 +2706,7 @@ const GEMINI_MODEL='gemini-2.5-flash-lite';
 
 
 // ===================== SETTINGS =====================
-const Settings = ({apiKey,setApiKey,isMobile,data,setData}) => {
+const Settings = ({apiKey,setApiKey,isMobile,data,setData,viewHint,onConsumeHint}) => {
   const [val,setVal]=useState(apiKey);
   const [show,setShow]=useState(false);
   const [saved,setSaved]=useState(false);
@@ -2662,6 +2716,11 @@ const Settings = ({apiKey,setApiKey,isMobile,data,setData}) => {
   const [notifSettings,setNotifSettings]=useState(()=>{
     try{return JSON.parse(localStorage.getItem('sb_notif_cfg')||'{}');}catch{return {};}
   });
+
+  // Navigate to revision tab if hinted from dashboard
+  useEffect(()=>{
+    if(viewHint==='revision'){setSTab('revision');setReviewStep(0);onConsumeHint?.();}
+  },[viewHint]);
 
   const handleSave=()=>{
     const k=val.trim();
@@ -2727,6 +2786,79 @@ const Settings = ({apiKey,setApiKey,isMobile,data,setData}) => {
     setNotifSettings(updated);
     localStorage.setItem('sb_notif_cfg',JSON.stringify(updated));
   };
+
+  // ── Schedule real browser notifications ──
+  const notifTimersRef=useRef({});
+  useEffect(()=>{
+    if(!notifEnabled||!data||Notification.permission!=='granted') return;
+    // Clear previous timers
+    Object.values(notifTimersRef.current).forEach(clearTimeout);
+    notifTimersRef.current={};
+
+    const msUntil=(hh,mm,extraDays=0)=>{
+      const now=new Date();
+      const t=new Date(now.getFullYear(),now.getMonth(),now.getDate()+extraDays,hh,mm,0,0);
+      if(t<=now) t.setDate(t.getDate()+1);
+      return t-now;
+    };
+
+    // Hábitos: recordatorio a las 20:00 si hay hábitos sin completar
+    if(notifSettings.habits){
+      const ms=msUntil(20,0);
+      notifTimersRef.current['habits']=setTimeout(()=>{
+        const pending=(data.habits||[]).filter(h=>!h.completions.includes(today())).length;
+        if(pending>0){
+          new Notification('🔥 Hábitos pendientes',{
+            body:`Tienes ${pending} hábito${pending>1?'s':''} sin completar hoy.`,
+            icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">🔥</text></svg>'
+          });
+        }
+      },ms);
+    }
+
+    // Cumpleaños: recordatorio a las 09:00 del día del cumpleaños
+    if(notifSettings.bdays && data.people){
+      data.people.forEach(p=>{
+        if(!p.birthday) return;
+        const [,m,d]=p.birthday.split('-');
+        const now=new Date();
+        const bday=new Date(now.getFullYear(),Number(m)-1,Number(d),9,0,0,0);
+        if(bday<now) bday.setFullYear(now.getFullYear()+1);
+        const ms=bday-now;
+        if(ms<86400000*2){ // sólo programar si es en menos de 2 días
+          notifTimersRef.current[`bday_${p.id}`]=setTimeout(()=>{
+            new Notification(`🎂 Cumpleaños de ${p.name}`,{
+              body:`Hoy es el cumpleaños de ${p.emoji||'👤'} ${p.name}. ¡No olvides felicitarle!`,
+              icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">🎂</text></svg>'
+            });
+          },ms);
+        }
+      });
+    }
+
+    // Documentos por vencer: aviso 30, 7 y 1 día antes a las 09:00
+    if(notifSettings.docs && data.homeDocs){
+      const todayStr=today();
+      data.homeDocs.forEach(doc=>{
+        if(!doc.expiresAt) return;
+        [30,7,1].forEach(days=>{
+          const d=new Date(doc.expiresAt+'T09:00:00');
+          d.setDate(d.getDate()-days);
+          const ms=d-new Date();
+          if(ms>0 && ms<86400000*31){
+            notifTimersRef.current[`doc_${doc.id}_${days}`]=setTimeout(()=>{
+              new Notification(`📄 Documento por vencer`,{
+                body:`"${doc.name}" vence en ${days} día${days>1?'s':''}.`,
+                icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">📄</text></svg>'
+              });
+            },ms);
+          }
+        });
+      });
+    }
+
+    return ()=>Object.values(notifTimersRef.current).forEach(clearTimeout);
+  },[notifEnabled,notifSettings,data]);
 
   const NOTIF_OPTIONS=[
     {key:'habits',label:'Hábitos pendientes',time:'20:00 cada día'},
@@ -5439,10 +5571,10 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
                </div>
                {/* Results count when filtering */}
                {(personSearch||relationFilter!=='todas')&&(()=>{
-                 const ps=q=>q.toLowerCase();
+                 const ps=s=>(s||'').toLowerCase();
                  const match=(p)=>{
                    const sq=ps(personSearch);
-                   const textMatch=!sq||(ps(p.name).includes(sq)||ps(p.relation||'').includes(sq)||ps(p.notes||'').includes(sq)||ps(p.phone||'').includes(sq)||ps(p.email||'').includes(sq));
+                   const textMatch=!sq||(ps(p.name).includes(sq)||ps(p.relation).includes(sq)||ps(p.notes).includes(sq)||ps(p.phone).includes(sq)||ps(p.email).includes(sq));
                    const relMatch=relationFilter==='todas'||p.relation===relationFilter;
                    return textMatch&&relMatch;
                  };
@@ -5451,10 +5583,10 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
                })()}
                <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(auto-fill,minmax(180px,1fr))',gap:10}}>
                {(()=>{
-                 const ps=q=>q.toLowerCase();
+                 const ps=s=>(s||'').toLowerCase();
                  const match=(p)=>{
                    const sq=ps(personSearch);
-                   const textMatch=!sq||(ps(p.name).includes(sq)||ps(p.relation||'').includes(sq)||ps(p.notes||'').includes(sq)||ps(p.phone||'').includes(sq)||ps(p.email||'').includes(sq));
+                   const textMatch=!sq||(ps(p.name).includes(sq)||ps(p.relation).includes(sq)||ps(p.notes).includes(sq)||ps(p.phone).includes(sq)||ps(p.email).includes(sq));
                    const relMatch=relationFilter==='todas'||p.relation===relationFilter;
                    return textMatch&&relMatch;
                  };
@@ -5694,15 +5826,41 @@ const DesarrolloPersonal = ({data,setData,isMobile,onBack}) => {
   const delLearning=(id)=>{const u=learnings.filter(l=>l.id!==id);setData(d=>({...d,learnings:u}));save('learnings',u);};
   const delIdea=(id)=>{const u=ideas.filter(i=>i.id!==id);setData(d=>({...d,ideas:u}));save('ideas',u);};
   const updateProgress=(id,pct)=>{const u=learnings.map(l=>l.id!==id?l:{...l,progress:Math.min(100,Math.max(0,pct))});setData(d=>({...d,learnings:u}));save('learnings',u);};
+  const updateHoursSpent=(id,h)=>{
+    const hrs=Math.max(0,Number(h)||0);
+    const u=learnings.map(l=>l.id!==id?l:{...l,hoursSpent:hrs});
+    setData(d=>({...d,learnings:u}));save('learnings',u);
+  };
 
-  // Pomodoro timer
+  // Pomodoro timer — al completar un ciclo de enfoque, acumula 25min al curso seleccionado
+  const selCourseRef=useRef(selCourse);
+  useEffect(()=>{selCourseRef.current=selCourse;},[selCourse]);
   useEffect(()=>{
     if(pomActive){
       timerRef.current=setInterval(()=>{
         setPomSeconds(s=>{
           if(s<=1){
             clearInterval(timerRef.current);setPomActive(false);
-            if(pomMode==='focus'){setPomCycles(c=>c+1);setStudyMin(m=>m+25);setPomMode('break');return 5*60;}
+            if(pomMode==='focus'){
+              setPomCycles(c=>c+1);setStudyMin(m=>m+25);setPomMode('break');
+              // Acumular horas al curso seleccionado
+              const cId=selCourseRef.current;
+              if(cId){
+                setData(d=>{
+                  const upd=(d.learnings||[]).map(l=>{
+                    if(l.id!==cId)return l;
+                    const newH=Math.round(((l.hoursSpent||0)+25/60)*100)/100;
+                    // streak: actualizar si último día de estudio no es hoy
+                    const newStreak=(l.lastStudyDate===today())?(l.streak||1):((l.lastStudyDate)===new Date(Date.now()-86400000).toISOString().slice(0,10)?(l.streak||0)+1:1);
+                    return {...l,hoursSpent:newH,lastStudyDate:today(),streak:newStreak};
+                  });
+                  save('learnings',upd);
+                  return {...d,learnings:upd};
+                });
+                toast.success('🍅 ¡Pomodoro completado! +25 min registrados');
+              }
+              return 5*60;
+            }
             else{setPomMode('focus');return 25*60;}
           }
           return s-1;
@@ -5798,13 +5956,23 @@ const DesarrolloPersonal = ({data,setData,isMobile,onBack}) => {
                   <span>{(l.hoursTotal||0)-(l.hoursSpent||0)}h restantes</span>
                 </div>
                 {isSel&&(
-                  <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${T.border}`,display:'flex',gap:8,alignItems:'center'}}>
-                    <span style={{fontSize:12,color:T.muted}}>Progreso:</span>
-                    <input type="range" min={0} max={100} value={l.progress||0}
-                      onChange={e=>{e.stopPropagation();updateProgress(l.id,Number(e.target.value));}}
-                      onClick={e=>e.stopPropagation()}
-                      style={{flex:1,accentColor:color}}/>
-                    <span style={{fontSize:12,fontWeight:700,color}}>{l.progress||0}%</span>
+                  <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${T.border}`,display:'flex',flexDirection:'column',gap:10}}>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <span style={{fontSize:12,color:T.muted,flexShrink:0}}>Progreso:</span>
+                      <input type="range" min={0} max={100} value={l.progress||0}
+                        onChange={e=>{e.stopPropagation();updateProgress(l.id,Number(e.target.value));}}
+                        onClick={e=>e.stopPropagation()}
+                        style={{flex:1,accentColor:color}}/>
+                      <span style={{fontSize:12,fontWeight:700,color,flexShrink:0}}>{l.progress||0}%</span>
+                    </div>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+                      <span style={{fontSize:12,color:T.muted,flexShrink:0}}>Horas reales:</span>
+                      <input type="number" min={0} step={0.5} value={l.hoursSpent||0}
+                        onChange={e=>updateHoursSpent(l.id,e.target.value)}
+                        style={{width:80,background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'4px 8px',borderRadius:8,fontSize:12,outline:'none',textAlign:'center'}}/>
+                      <span style={{fontSize:11,color:T.muted}}>de {l.hoursTotal||0}h</span>
+                      {(l.streak||0)>0&&<span style={{fontSize:11,color:T.orange,fontWeight:700,marginLeft:'auto'}}>🔥 racha {l.streak}d</span>}
+                    </div>
                   </div>
                 )}
               </Card>
@@ -6271,6 +6439,7 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
       {/* ══════════ CONTACTOS ══════════ */}
       {tab==='contactos'&&(
         <div>
+          <Input value={contactSearch} onChange={setContactSearch} placeholder="Buscar contacto por nombre, rol, teléfono…" style={{marginBottom:12,fontSize:13}}/>
           {(()=>{
             const fc=contactSearch?contacts.filter(c=>
               [c.name,c.role,c.specialty,c.notes].join(' ').toLowerCase().includes(contactSearch.toLowerCase())
@@ -7269,7 +7438,45 @@ const Finance = ({data,setData,isMobile,onBack}) => {
 };
 
 
-// ===================== TOAST SYSTEM =====================
+// ===================== ONBOARDING =====================
+const ONBOARDING_STEPS=[
+  {icon:'🧠',title:'Bienvenido a tu Segundo Cerebro',desc:'Un sistema todo-en-uno para externalizar tu memoria, organizar tus ideas y vivir con más intención.',color:'#00c896'},
+  {icon:'📥',title:'Empieza por el Inbox',desc:'Vuelca cualquier idea, tarea o pensamiento. No lo filtres, solo captúralo. Después lo clasificas con el flujo GTD.',color:'#4da6ff'},
+  {icon:'🎯',title:'Define tus Objetivos',desc:'Cada área de tu vida puede tener objetivos concretos, con milestones y check-ins semanales para medir avance.',color:'#ff8c42'},
+  {icon:'🔥',title:'Construye hábitos sólidos',desc:'Registra tus hábitos diarios y visualiza tu progreso con rachas, heatmaps y estadísticas de las últimas semanas.',color:'#ff5069'},
+  {icon:'⚡',title:'Psicke te ayuda',desc:'Abre el asistente IA con el botón flotante y pídele resumir tu día, crear notas/tareas con /comandos, o aconsejarte.',color:'#a78bfa'},
+  {icon:'🔍',title:'Búsqueda global',desc:'Presiona Cmd+K (o Ctrl+K) en cualquier momento para buscar en todos tus módulos, o filtrar por fechas como "esta semana".',color:'#ffd166'},
+];
+const Onboarding=({onDone})=>{
+  const [step,setStep]=useState(0);
+  const s=ONBOARDING_STEPS[step];
+  const isLast=step===ONBOARDING_STEPS.length-1;
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:16,backdropFilter:'blur(8px)'}}>
+      <div style={{background:T.surface,border:`1px solid ${s.color}50`,borderRadius:20,padding:32,maxWidth:400,width:'100%',textAlign:'center',boxShadow:`0 0 60px ${s.color}30`}}>
+        {/* Progress dots */}
+        <div style={{display:'flex',gap:6,justifyContent:'center',marginBottom:24}}>
+          {ONBOARDING_STEPS.map((_,i)=>(
+            <div key={i} style={{width:i===step?22:7,height:7,borderRadius:4,background:i===step?s.color:T.border,transition:'all 0.3s'}}/>
+          ))}
+        </div>
+        <div style={{fontSize:52,marginBottom:16,lineHeight:1}}>{s.icon}</div>
+        <h2 style={{color:T.text,fontSize:20,fontWeight:700,margin:'0 0 12px',lineHeight:1.3}}>{s.title}</h2>
+        <p style={{color:T.muted,fontSize:14,lineHeight:1.7,margin:'0 0 28px'}}>{s.desc}</p>
+        <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+          {step>0&&<button onClick={()=>setStep(s=>s-1)} style={{padding:'10px 20px',borderRadius:12,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>← Atrás</button>}
+          <button onClick={isLast?onDone:()=>setStep(s=>s+1)}
+            style={{padding:'10px 28px',borderRadius:12,border:'none',background:s.color,color:'#000',cursor:'pointer',fontSize:14,fontWeight:700,fontFamily:'inherit',flex:1,maxWidth:200}}>
+            {isLast?'¡Empezar! 🚀':'Siguiente →'}
+          </button>
+        </div>
+        <button onClick={onDone} style={{marginTop:14,background:'none',border:'none',color:T.dim,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Omitir tour</button>
+      </div>
+    </div>
+  );
+};
+
+
 const ToastCtx = { listeners: [] };
 const toast = {
   show:(msg,type='success',sub='')=>ToastCtx.listeners.forEach(fn=>fn({id:Date.now()+Math.random(),msg,type,sub})),
@@ -7315,6 +7522,8 @@ export default function App() {
   const [psickeOpen,setPsickeOpen]=useState(false);
   const [showSearch,setShowSearch]=useState(false);
   const [apiKey,setApiKey]=useState(()=>localStorage.getItem('sb_gemini_key')||'');
+  const [showOnboarding,setShowOnboarding]=useState(()=>!localStorage.getItem('sb_onboarding_done'));
+  const [transitioning,setTransitioning]=useState(false);
   const isMobile=useIsMobile();
   isMobileGlobal=isMobile;
 
@@ -7344,9 +7553,17 @@ export default function App() {
   },[]);
 
   // Smart navigate: sets view + optional hint for target component
-  const navigate=(v,hint=null)=>{setView(v);setViewHint(hint);};
+  const navigate=(v,hint=null)=>{
+    if(v===view){setViewHint(hint);return;}
+    setTransitioning(true);
+    setTimeout(()=>{setView(v);setViewHint(hint);setTransitioning(false);},120);
+  };
   // Nav bar navigate: clears any hint
-  const navTo=(v)=>{setView(v);setViewHint(null);};
+  const navTo=(v)=>{
+    if(v===view)return;
+    setTransitioning(true);
+    setTimeout(()=>{setView(v);setViewHint(null);setTransitioning(false);},120);
+  };
 
   useEffect(()=>{
     (async()=>{
@@ -7393,7 +7610,7 @@ export default function App() {
     sideprojects:<SideProjects {...props} onBack={()=>navTo('dashboard')}/>,
     desarrollo:<DesarrolloPersonal {...props} onBack={()=>navTo('dashboard')}/>,
     hogar:<Hogar {...props} onBack={()=>navTo('dashboard')}/>,
-    settings:<Settings apiKey={apiKey} setApiKey={setApiKey} isMobile={isMobile} data={data} setData={setData}/>,
+    settings:<Settings apiKey={apiKey} setApiKey={setApiKey} isMobile={isMobile} data={data} setData={setData} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
   };
   
 
@@ -7482,7 +7699,9 @@ export default function App() {
 
       {/* MAIN CONTENT */}
       <main style={{flex:1,overflowY:'auto',padding:isMobile?'16px 16px 90px':'28px',minHeight:0}}>
-        {views[view]}
+        <div style={{opacity:transitioning?0:1,transform:transitioning?'translateY(6px)':'translateY(0)',transition:'opacity 0.12s ease,transform 0.12s ease'}}>
+          {views[view]}
+        </div>
       </main>
 
       {/* MOBILE BOTTOM NAV */}
@@ -7517,6 +7736,9 @@ export default function App() {
       {/* PSICKE — nav-controlled, no floating bubble */}
       <Psicke apiKey={apiKey} onGoSettings={()=>navTo('settings')} data={data} setData={setData}
         openFromNav={psickeOpen} onNavClose={()=>setPsickeOpen(false)}/>
+
+      {/* ONBOARDING */}
+      {showOnboarding&&<Onboarding onDone={()=>{localStorage.setItem('sb_onboarding_done','1');setShowOnboarding(false);}}/>}
 
       <ToastContainer/>
     </div>
