@@ -180,10 +180,17 @@ const Card = ({children,style={},onClick}) => (
   </div>
 );
 
-const PageHeader = ({title,subtitle,action,isMobile}) => (
+const PageHeader = ({title,subtitle,action,isMobile,onBack}) => (
   <div style={{marginBottom:20}}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-      <h2 style={{margin:0,color:T.text,fontSize:isMobile?18:20,fontWeight:700}}>{title}</h2>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        {onBack&&(
+          <button onClick={onBack} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:10,padding:'6px 10px',cursor:'pointer',color:T.muted,display:'flex',alignItems:'center',gap:4,fontFamily:'inherit',fontSize:12}}>
+            <Icon name="back" size={16}/><span style={{fontSize:12,fontWeight:500}}>Áreas</span>
+          </button>
+        )}
+        <h2 style={{margin:0,color:T.text,fontSize:isMobile?18:20,fontWeight:700}}>{title}</h2>
+      </div>
       {action}
     </div>
     {subtitle&&<p style={{color:T.muted,fontSize:13,marginTop:4,marginBottom:0}}>{subtitle}</p>}
@@ -327,13 +334,28 @@ const Dashboard = ({data,isMobile,onNavigate}) => {
 // ===================== AREAS =====================
 const Areas = ({data,setData,isMobile,onNavigate}) => {
   const [modal,setModal]=useState(false);
+  const [editModal,setEditModal]=useState(false);
+  const [editingArea,setEditingArea]=useState(null);
   const [form,setForm]=useState({name:'',icon:'🌟',color:T.areaColors[0]});
-  const emojis=['💪','💼','💰','📚','🏠','❤️','🎨','🌍','🎵','⚽','✈️','🍎','🧘','🎯','🔬','💡'];
+  const [editForm,setEditForm]=useState({name:'',icon:'🌟',color:T.areaColors[0]});
+  const emojis=['💪','💼','💰','📚','🏠','❤️','🎨','🌍','🎵','⚽','✈️','🍎','🧘','🎯','🔬','💡','🚀','👥','🧠','🌟','🏃','🎓','🔑','🛒'];
   const saveArea=()=>{
     if(!form.name.trim())return;
     const updated=[...data.areas,{id:uid(),...form}];
     setData(d=>({...d,areas:updated}));save('areas',updated);
     setModal(false);setForm({name:'',icon:'🌟',color:T.areaColors[0]});
+  };
+  const updateArea=()=>{
+    if(!editForm.name.trim()||!editingArea)return;
+    const updated=data.areas.map(a=>a.id===editingArea.id?{...a,...editForm}:a);
+    setData(d=>({...d,areas:updated}));save('areas',updated);
+    setEditModal(false);setEditingArea(null);
+  };
+  const openEdit=(e,area)=>{
+    e.stopPropagation();
+    setEditingArea(area);
+    setEditForm({name:area.name,icon:area.icon,color:area.color});
+    setEditModal(true);
   };
   const del=(id)=>{
     if(!window.confirm('¿Eliminar esta área? Los objetivos, proyectos y notas vinculados quedarán sin área asignada.'))return;
@@ -344,9 +366,19 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
     setData(d=>({...d,areas:u,objectives:updObj,projects:updProj,notes:updNotes}));
     save('areas',u);save('objectives',updObj);save('projects',updProj);save('notes',updNotes);
   };
+  const EmojiPicker=({value,onChange})=>(
+    <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+      {emojis.map(e=><button key={e} onClick={()=>onChange(e)} style={{width:40,height:40,borderRadius:10,border:`2px solid ${value===e?T.accent:T.border}`,background:T.bg,cursor:'pointer',fontSize:18}}>{e}</button>)}
+    </div>
+  );
+  const ColorPicker=({value,onChange})=>(
+    <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+      {T.areaColors.map(c=><button key={c} onClick={()=>onChange(c)} style={{width:32,height:32,borderRadius:'50%',background:c,border:`3px solid ${value===c?T.text:'transparent'}`,cursor:'pointer'}}/>)}
+    </div>
+  );
   return (
     <div>
-      <PageHeader title="Áreas de vida" subtitle="Los grandes pilares de su vida." isMobile={isMobile}
+      <PageHeader title="Áreas de vida" subtitle="Los grandes pilares de tu vida." isMobile={isMobile}
         action={<Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Nueva</Btn>}/>
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(auto-fill,minmax(180px,1fr))',gap:12}}>
         {data.areas.map(a=>{
@@ -362,7 +394,17 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
                 <span style={{fontSize:11,color:T.muted,background:T.surface2,padding:'2px 8px',borderRadius:20}}>{projCount} proy</span>
               </div>
               <div style={{fontSize:10,color:T.accent,fontWeight:500}}>Ver detalle →</div>
-              <button onClick={e=>{e.stopPropagation();del(a.id);}} style={{position:'absolute',top:10,right:10,background:'none',border:'none',color:T.dim,cursor:'pointer',padding:6,display:'flex'}}><Icon name="trash" size={14}/></button>
+              {/* Edit + Delete buttons */}
+              <div style={{position:'absolute',top:8,right:8,display:'flex',gap:4}}>
+                <button onClick={e=>openEdit(e,a)}
+                  style={{background:`${T.accent}18`,border:`1px solid ${T.accent}40`,borderRadius:7,color:T.accent,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',fontSize:11,fontWeight:600,gap:3}}>
+                  ✏️
+                </button>
+                <button onClick={e=>{e.stopPropagation();del(a.id);}}
+                  style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}>
+                  <Icon name="trash" size={14}/>
+                </button>
+              </div>
             </Card>
           );
         })}
@@ -372,23 +414,42 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
           <Icon name="plus" size={20}/><span style={{fontSize:13}}>Nueva área</span>
         </div>
       </div>
+
+      {/* CREATE modal */}
       {modal&&(
         <Modal title="Nueva área" onClose={()=>setModal(false)}>
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <Input value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="Nombre del área"/>
             <div>
               <label style={{color:T.muted,fontSize:12,marginBottom:8,display:'block'}}>Icono</label>
-              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                {emojis.map(e=><button key={e} onClick={()=>setForm(f=>({...f,icon:e}))} style={{width:40,height:40,borderRadius:10,border:`2px solid ${form.icon===e?T.accent:T.border}`,background:T.bg,cursor:'pointer',fontSize:18}}>{e}</button>)}
-              </div>
+              <EmojiPicker value={form.icon} onChange={v=>setForm(f=>({...f,icon:v}))}/>
             </div>
             <div>
               <label style={{color:T.muted,fontSize:12,marginBottom:8,display:'block'}}>Color</label>
-              <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-                {T.areaColors.map(c=><button key={c} onClick={()=>setForm(f=>({...f,color:c}))} style={{width:32,height:32,borderRadius:'50%',background:c,border:`3px solid ${form.color===c?T.text:'transparent'}`,cursor:'pointer'}}/>)}
-              </div>
+              <ColorPicker value={form.color} onChange={v=>setForm(f=>({...f,color:v}))}/>
             </div>
             <Btn onClick={saveArea} style={{width:'100%',justifyContent:'center'}}>Crear área</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* EDIT modal */}
+      {editModal&&editingArea&&(
+        <Modal title={`Editar — ${editingArea.name}`} onClose={()=>{setEditModal(false);setEditingArea(null);}}>
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
+            <Input value={editForm.name} onChange={v=>setEditForm(f=>({...f,name:v}))} placeholder="Nombre del área"/>
+            <div>
+              <label style={{color:T.muted,fontSize:12,marginBottom:8,display:'block'}}>Icono</label>
+              <EmojiPicker value={editForm.icon} onChange={v=>setEditForm(f=>({...f,icon:v}))}/>
+            </div>
+            <div>
+              <label style={{color:T.muted,fontSize:12,marginBottom:8,display:'block'}}>Color</label>
+              <ColorPicker value={editForm.color} onChange={v=>setEditForm(f=>({...f,color:v}))}/>
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <Btn onClick={updateArea} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+              <Btn variant="ghost" onClick={()=>{setEditModal(false);setEditingArea(null);}} style={{justifyContent:'center'}}>Cancelar</Btn>
+            </div>
           </div>
         </Modal>
       )}
@@ -397,7 +458,7 @@ const Areas = ({data,setData,isMobile,onNavigate}) => {
 };
 
 // ===================== AREA DETAIL =====================
-const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) => {
+const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate,onBack}) => {
   const [areaId,setAreaId]=useState(viewHint||'');
 
 
@@ -411,37 +472,37 @@ const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
 
   // Si el área es Finanzas, renderizar la vista dedicada
   if(area.name.toLowerCase().includes('finanz')||area.icon==='💰'){
-    return <Finance data={data} setData={setData} isMobile={isMobile}/>;
+    return <Finance data={data} setData={setData} isMobile={isMobile} onBack={onBack}/>;
   }
 
   // Si el área es Salud, renderizar la vista dedicada
   if(area.name.toLowerCase().includes('salud')||area.icon==='💪'){
-    return <Health data={data} setData={setData} isMobile={isMobile}/>;
+    return <Health data={data} setData={setData} isMobile={isMobile} onBack={onBack}/>;
   }
 
   // Si el área es Hogar, renderizar la vista dedicada
   if(area.name.toLowerCase().includes('hogar')||area.name.toLowerCase().includes('casa')||area.icon==='🏠'){
-    return <Hogar data={data} setData={setData} isMobile={isMobile}/>;
+    return <Hogar data={data} setData={setData} isMobile={isMobile} onBack={onBack}/>;
   }
 
   // Si el área es Desarrollo Personal, renderizar la vista dedicada
   if(area.name.toLowerCase().includes('desarrollo')||area.name.toLowerCase().includes('personal')||area.icon==='🧠'){
-    return <DesarrolloPersonal data={data} setData={setData} isMobile={isMobile}/>;
+    return <DesarrolloPersonal data={data} setData={setData} isMobile={isMobile} onBack={onBack}/>;
   }
 
   // Si el área es Relaciones, renderizar la vista dedicada
   if(area.name.toLowerCase().includes('relacion')||area.icon==='👥'){
-    return <Relaciones data={data} setData={setData} isMobile={isMobile}/>;
+    return <Relaciones data={data} setData={setData} isMobile={isMobile} onBack={onBack}/>;
   }
 
   // Si el área es Side Projects, renderizar la vista dedicada
   if(area.name.toLowerCase().includes('side')||area.name.toLowerCase().includes('project')||area.icon==='🚀'){
-    return <SideProjects data={data} setData={setData} isMobile={isMobile}/>;
+    return <SideProjects data={data} setData={setData} isMobile={isMobile} onBack={onBack}/>;
   }
 
   // Si el área es Trabajo, embeber app externa
   if(area.name.toLowerCase().includes('trabajo')||area.name.toLowerCase().includes('work')||area.icon==='💼'){
-    return <TrabajoEmbed isMobile={isMobile}/>;
+    return <TrabajoEmbed isMobile={isMobile} onBack={onBack}/>;
   }
 
   const areaObjectives=data.objectives.filter(o=>o.areaId===areaId);
@@ -466,7 +527,12 @@ const AreaDetail = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
   return (
     <div>
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
-        <div style={{width:44,height:44,borderRadius:12,background:`${area.color}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}>{area.icon}</div>
+        {onBack&&(
+          <button onClick={onBack} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:10,padding:'6px 10px',cursor:'pointer',color:T.muted,display:'flex',alignItems:'center',gap:4,fontFamily:'inherit',fontSize:12,flexShrink:0}}>
+            <Icon name="back" size={16}/><span style={{fontSize:12,fontWeight:500}}>Áreas</span>
+          </button>
+        )}
+        <div style={{width:44,height:44,borderRadius:12,background:`${area.color}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,flexShrink:0}}>{area.icon}</div>
         <div style={{flex:1}}>
           <h2 style={{margin:0,color:T.text,fontSize:isMobile?20:24,fontWeight:700}}>{area.name}</h2>
           <p style={{color:T.muted,fontSize:12,margin:0}}>{areaObjectives.length} objetivos · {areaProjects.length} proyectos · {areaNotes.length} notas</p>
@@ -2836,7 +2902,7 @@ const MOBILE_NAV=[
 const MORE_NAV=NAV.slice(5);
 
 // ===================== TRABAJO EMBED =====================
-const TrabajoEmbed = ({isMobile}) => {
+const TrabajoEmbed = ({isMobile,onBack}) => {
   const [loaded,setLoaded]     = useState(false);
   const [error,setError]       = useState(false);
   const [fullscreen,setFullscreen] = useState(false);
@@ -2852,9 +2918,16 @@ const TrabajoEmbed = ({isMobile}) => {
   const header = (
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:fullscreen?0:14,
       ...(fullscreen?{padding:'10px 16px',background:T.surface,borderBottom:`1px solid ${T.border}`,flexShrink:0}:{})}}>
-      <div>
-        <h2 style={{margin:0,color:T.text,fontSize:isMobile?18:20,fontWeight:700}}>💼 Trabajo</h2>
-        {!fullscreen&&<p style={{color:T.muted,fontSize:13,margin:'4px 0 0'}}>ControlCheck — tu app de trabajo</p>}
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        {onBack&&!fullscreen&&(
+          <button onClick={onBack} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:10,padding:'6px 10px',cursor:'pointer',color:T.muted,display:'flex',alignItems:'center',gap:4,fontFamily:'inherit',fontSize:12}}>
+            <Icon name="back" size={16}/><span style={{fontSize:12,fontWeight:500}}>Áreas</span>
+          </button>
+        )}
+        <div>
+          <h2 style={{margin:0,color:T.text,fontSize:isMobile?18:20,fontWeight:700}}>💼 Trabajo</h2>
+          {!fullscreen&&<p style={{color:T.muted,fontSize:13,margin:'4px 0 0'}}>ControlCheck — tu app de trabajo</p>}
+        </div>
       </div>
       <div style={{display:'flex',gap:8}}>
         <button onClick={()=>setFullscreen(f=>!f)}
@@ -2911,7 +2984,7 @@ const TrabajoEmbed = ({isMobile}) => {
 };
 
 // ===================== SIDE PROJECTS =====================
-const SideProjects = ({data,setData,isMobile}) => {
+const SideProjects = ({data,setData,isMobile,onBack}) => {
   const [tab,setTab]             = useState('proyectos');
   const [modalProj,setModalProj] = useState(false);
   const [modalTask,setModalTask] = useState(false);
@@ -2997,7 +3070,7 @@ const SideProjects = ({data,setData,isMobile}) => {
 
   return (
     <div>
-      <PageHeader isMobile={isMobile} title="🚀 Side Projects"
+      <PageHeader isMobile={isMobile} title="🚀 Side Projects" onBack={onBack}
         subtitle="Proyectos personales, experimentos y lanzamientos"
         action={
           <div style={{display:'flex',gap:8}}>
@@ -3349,7 +3422,7 @@ const SideProjects = ({data,setData,isMobile}) => {
 };
 
 // ===================== RELACIONES =====================
-const Relaciones = ({data,setData,isMobile}) => {
+const Relaciones = ({data,setData,isMobile,onBack}) => {
   const [tab,setTab]               = useState('personas');
   const [modalPerson,setModalPerson]   = useState(false);
   const [modalFollowUp,setModalFollowUp] = useState(false);
@@ -3429,7 +3502,7 @@ const Relaciones = ({data,setData,isMobile}) => {
 
   return (
     <div>
-      <PageHeader isMobile={isMobile} title="👥 Relaciones"
+      <PageHeader isMobile={isMobile} title="👥 Relaciones" onBack={onBack}
         subtitle="CRM personal — personas, seguimientos e interacciones"
         action={
           <div style={{display:'flex',gap:8}}>
@@ -3740,7 +3813,7 @@ const Relaciones = ({data,setData,isMobile}) => {
 };
 
 // ===================== DESARROLLO PERSONAL =====================
-const DesarrolloPersonal = ({data,setData,isMobile}) => {
+const DesarrolloPersonal = ({data,setData,isMobile,onBack}) => {
   const [tab,setTab]             = useState('libros');
   const [modalBook,setModalBook] = useState(false);
   const [modalLearn,setModalLearn] = useState(false);
@@ -3832,7 +3905,7 @@ const DesarrolloPersonal = ({data,setData,isMobile}) => {
 
   return (
     <div>
-      <PageHeader isMobile={isMobile} title="🧠 Desarrollo Personal"
+      <PageHeader isMobile={isMobile} title="🧠 Desarrollo Personal" onBack={onBack}
         subtitle="Libros, aprendizajes, retrospectivas e ideas"
         action={
           <div style={{display:'flex',gap:8}}>
@@ -4151,7 +4224,7 @@ const DesarrolloPersonal = ({data,setData,isMobile}) => {
 };
 
 // ===================== HOGAR =====================
-const Hogar = ({data,setData,isMobile}) => {
+const Hogar = ({data,setData,isMobile,onBack}) => {
   const [tab,setTab]       = useState('mantenimientos');
   const [modalMaint,setModalMaint]   = useState(false);
   const [modalDoc,setModalDoc]       = useState(false);
@@ -4251,7 +4324,7 @@ const Hogar = ({data,setData,isMobile}) => {
 
   return (
     <div>
-      <PageHeader isMobile={isMobile} title="🏠 Hogar"
+      <PageHeader isMobile={isMobile} title="🏠 Hogar" onBack={onBack}
         subtitle="Mantenimientos, documentos y contactos de servicio"
         action={
           <div style={{display:'flex',gap:8}}>
@@ -4523,7 +4596,7 @@ const Hogar = ({data,setData,isMobile}) => {
 };
 
 // ===================== HEALTH =====================
-const Health = ({data,setData,isMobile}) => {
+const Health = ({data,setData,isMobile,onBack}) => {
   const [tab,setTab]=useState('metricas');
   const [modalMetric,setModalMetric]=useState(false);
   const [modalMed,setModalMed]=useState(false);
@@ -4621,7 +4694,7 @@ const Health = ({data,setData,isMobile}) => {
 
   return (
     <div>
-      <PageHeader isMobile={isMobile} title="💪 Salud"
+      <PageHeader isMobile={isMobile} title="💪 Salud" onBack={onBack}
         subtitle="Métricas, medicamentos y actividad física"
         action={
           <div style={{display:'flex',gap:8}}>
@@ -4878,7 +4951,7 @@ const Health = ({data,setData,isMobile}) => {
 };
 
 // ===================== FINANCE =====================
-const Finance = ({data,setData,isMobile}) => {
+const Finance = ({data,setData,isMobile,onBack}) => {
   const [modal,setModal]=useState(false);
   const [tab,setTab]=useState('movimientos'); // 'movimientos' | 'presupuesto'
   const [filter,setFilter]=useState('all'); // 'all'|'ingreso'|'egreso'
@@ -4941,7 +5014,7 @@ const Finance = ({data,setData,isMobile}) => {
 
   return (
     <div>
-      <PageHeader isMobile={isMobile}
+      <PageHeader isMobile={isMobile} onBack={onBack}
         title="💰 Finanzas"
         subtitle="Control de ingresos, egresos y presupuesto"
         action={<Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={14}/>Nuevo</Btn>}
@@ -5176,7 +5249,7 @@ export default function App() {
   const views={
     dashboard:<Dashboard {...props} onNavigate={navigate}/>,
     areas:<Areas {...props} onNavigate={navigate}/>,
-    areaDetail:<AreaDetail {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
+    areaDetail:<AreaDetail {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate} onBack={()=>navTo('areas')}/>,
     objectives:<Objectives {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
     projects:<ProjectsAndTasks {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
     notes:<Notes {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
