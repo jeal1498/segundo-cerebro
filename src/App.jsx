@@ -83,6 +83,162 @@ const uid = () => Math.random().toString(36).slice(2,10);
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const fmt = (d) => d ? new Date(d).toLocaleDateString('es-ES',{day:'2-digit',month:'short'}) : '';
 
+// ===================== MARKDOWN RENDERER =====================
+const renderMd = (text='') => text
+  .replace(/^### (.+)$/gm,'<h3 style="font-size:14px;font-weight:700;color:#e2eaf4;margin:10px 0 4px">$1</h3>')
+  .replace(/^## (.+)$/gm,'<h2 style="font-size:16px;font-weight:700;color:#e2eaf4;margin:12px 0 6px">$1</h2>')
+  .replace(/^# (.+)$/gm,'<h1 style="font-size:19px;font-weight:800;color:#e2eaf4;margin:0 0 8px">$1</h1>')
+  .replace(/\*\*(.+?)\*\*/g,'<strong style="color:#e2eaf4;font-weight:700">$1</strong>')
+  .replace(/\*(.+?)\*/g,'<em style="color:#a0b4c8;font-style:italic">$1</em>')
+  .replace(/^- \[ \] (.+)$/gm,'<div style="display:flex;gap:8px;align-items:flex-start;margin:3px 0"><input type="checkbox" style="margin-top:3px;accent-color:#00c896"/><span style="color:#c4d4e3;font-size:14px">$1</span></div>')
+  .replace(/^- \[x\] (.+)$/gm,'<div style="display:flex;gap:8px;align-items:flex-start;margin:3px 0"><input type="checkbox" checked style="margin-top:3px;accent-color:#00c896"/><span style="color:#6b8299;text-decoration:line-through;font-size:14px">$1</span></div>')
+  .replace(/^- (.+)$/gm,'<div style="display:flex;gap:8px;margin:3px 0"><span style="color:#00c896;margin-top:2px">•</span><span style="color:#c4d4e3;font-size:14px">$1</span></div>')
+  .replace(/^(\d+)\. (.+)$/gm,'<div style="display:flex;gap:8px;margin:3px 0"><span style="color:#6b8299;font-size:12px;min-width:16px;margin-top:2px">$1.</span><span style="color:#c4d4e3;font-size:14px">$2</span></div>')
+  .replace(/\n/g,'<br/>');
+
+// ===================== RING CHART =====================
+const Ring = ({pct:p,color,size=52,stroke=5,label,sublabel}) => {
+  const r=(size-stroke*2)/2;
+  const circ=2*Math.PI*r;
+  const dash=circ*((p||0)/100);
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+      <svg width={size} height={size} style={{transform:'rotate(-90deg)',flexShrink:0}}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T.border} strokeWidth={stroke}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+          style={{transition:'stroke-dasharray 0.6s ease'}}/>
+        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle"
+          fill={T.text} fontSize={size<50?9:10} fontWeight="700"
+          style={{transform:'rotate(90deg)',transformOrigin:'center'}}>
+          {p||0}%
+        </text>
+      </svg>
+      {label&&<div style={{fontSize:9,color:T.muted,textAlign:'center',maxWidth:54,lineHeight:1.2}}>{label}</div>}
+      {sublabel&&<div style={{fontSize:9,color:color,fontWeight:700}}>{sublabel}</div>}
+    </div>
+  );
+};
+
+// ===================== BALANCE MINI-CHART =====================
+const BalanceSparkline = ({transactions}) => {
+  const months=[];
+  const now=new Date();
+  for(let i=5;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label=d.toLocaleDateString('es-ES',{month:'short'});
+    const month=(transactions||[]).filter(t=>t.date?.slice(0,7)===key);
+    const income=month.filter(t=>t.type==='ingreso').reduce((s,t)=>s+(t.amount||0),0);
+    const expense=month.filter(t=>t.type==='egreso').reduce((s,t)=>s+(t.amount||0),0);
+    months.push({label,income,expense,key});
+  }
+  const max=Math.max(...months.flatMap(m=>[m.income,m.expense]),1);
+  return (
+    <div style={{display:'flex',gap:5,alignItems:'flex-end',height:52}}>
+      {months.map((m,i)=>{
+        const iH=Math.max((m.income/max)*44,m.income>0?3:0);
+        const eH=Math.max((m.expense/max)*44,m.expense>0?3:0);
+        const isCurrent=i===5;
+        return (
+          <div key={m.key} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+            <div style={{display:'flex',gap:1.5,alignItems:'flex-end',height:44}}>
+              <div style={{width:5,height:iH,background:T.accent,borderRadius:'2px 2px 0 0',opacity:isCurrent?1:0.6,transition:'height 0.4s ease'}}/>
+              <div style={{width:5,height:eH,background:T.red,borderRadius:'2px 2px 0 0',opacity:isCurrent?1:0.6,transition:'height 0.4s ease'}}/>
+            </div>
+            <div style={{fontSize:8,color:isCurrent?T.accent:T.dim,fontWeight:isCurrent?700:400}}>{m.label}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ===================== HABIT HEATMAP =====================
+const HabitHeatmap = ({completions,color}) => {
+  const days=Array.from({length:35},(_,i)=>{
+    const d=new Date();d.setDate(d.getDate()-(34-i));
+    const str=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return {str,done:(completions||[]).includes(str)};
+  });
+  return (
+    <div style={{display:'flex',flexWrap:'wrap',gap:3}}>
+      {days.map((d,i)=>(
+        <div key={i} title={d.str}
+          style={{width:10,height:10,borderRadius:2,
+            background:d.done?color:T.border,
+            opacity:d.done?0.9:0.35,transition:'background 0.2s'}}/>
+      ))}
+    </div>
+  );
+};
+
+// ===================== SPARKLINE =====================
+const Sparkline = ({data,color,width=260,height=56,filled=false}) => {
+  if(!data||data.length<2) return null;
+  const vals=data.map(d=>typeof d==='object'?(d.value??d.v??0):d);
+  const min=Math.min(...vals),max=Math.max(...vals);
+  const range=max-min||1;
+  const pts=vals.map((v,i)=>{
+    const x=(i/(vals.length-1))*width;
+    const y=height-((v-min)/range)*(height-8)-4;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const pathD=`M ${pts.join(' L ')}`;
+  const fillD=`M 0,${height} L ${pts.join(' L ')} L ${width},${height} Z`;
+  const lastPt=pts[pts.length-1].split(',');
+  return (
+    <svg width={width} height={height} style={{overflow:'visible',display:'block'}}>
+      {filled&&<path d={fillD} fill={`${color}20`}/>}
+      <path d={pathD} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx={lastPt[0]} cy={lastPt[1]} r="3" fill={color}/>
+    </svg>
+  );
+};
+
+// ===================== BALANCE BAR CHART =====================
+const BalanceBarChart = ({months,height=90}) => {
+  const max=Math.max(...months.flatMap(m=>[m.income||0,m.expense||0]),1);
+  return (
+    <div style={{display:'flex',gap:5,alignItems:'flex-end',height}}>
+      {months.map((m,i)=>{
+        const iH=Math.max(((m.income||0)/max)*(height-18),m.income>0?3:0);
+        const eH=Math.max(((m.expense||0)/max)*(height-18),m.expense>0?3:0);
+        const isCur=i===months.length-1;
+        return (
+          <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+            <div style={{display:'flex',gap:2,alignItems:'flex-end',height:height-18}}>
+              <div style={{width:8,height:iH,background:T.accent,borderRadius:'3px 3px 0 0',opacity:isCur?1:0.55,transition:'height 0.5s'}} title={`Ingresos: $${(m.income||0).toLocaleString()}`}/>
+              <div style={{width:8,height:eH,background:T.red,borderRadius:'3px 3px 0 0',opacity:isCur?1:0.55,transition:'height 0.5s'}} title={`Egresos: $${(m.expense||0).toLocaleString()}`}/>
+            </div>
+            <div style={{fontSize:9,color:isCur?T.accent:T.dim,fontWeight:isCur?700:400,textAlign:'center'}}>{m.label}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ===================== HORIZONTAL BAR =====================
+const HBar = ({label,value,total,color,amount,fmtCurrency}) => {
+  const pct=total>0?(value/total)*100:0;
+  const fmt=fmtCurrency||(n=>`$${Number(n).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0})}`);
+  return (
+    <div style={{marginBottom:11}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+        <span style={{fontSize:12,color:T.muted}}>{label}</span>
+        <div style={{display:'flex',gap:10}}>
+          <span style={{fontSize:11,color:T.dim}}>{pct.toFixed(0)}%</span>
+          <span style={{fontSize:12,color,fontWeight:600}}>{fmt(amount)}</span>
+        </div>
+      </div>
+      <div style={{height:6,background:T.border,borderRadius:3,overflow:'hidden'}}>
+        <div style={{height:'100%',width:`${pct}%`,background:color,borderRadius:3,transition:'width 0.6s ease'}}/>
+      </div>
+    </div>
+  );
+};
+
 // ===================== INITIAL DATA =====================
 const initData = () => ({
   areas:[
@@ -253,24 +409,71 @@ const GlobalSearch = ({data,onNavigate,onClose}) => {
 
 // ===================== DASHBOARD =====================
 const Dashboard = ({data,isMobile,onNavigate}) => {
+  const todayStr=today();
+  const h=new Date().getHours();
+  const greeting=h<12?'Buenos días 🌅':h<18?'Buenas tardes ☀️':'Buenas noches 🌙';
   const pendingTasks=data.tasks.filter(t=>t.status!=='done').length;
   const inboxUnread=data.inbox.filter(i=>!i.processed).length;
-  const todayHabits=data.habits.filter(h=>h.completions.includes(today())).length;
+  const dailyHabits=data.habits.filter(hb=>!hb.frequency||hb.frequency==='daily');
+  const todayDoneHabits=dailyHabits.filter(hb=>hb.completions.includes(todayStr));
+  const habitPct=dailyHabits.length?Math.round(todayDoneHabits.length/dailyHabits.length*100):0;
+
+  // Stats grid
   const stats=[
     {label:'Áreas',val:data.areas.length,icon:'grid',color:T.blue,view:'areas',hint:null},
     {label:'Objetivos',val:data.objectives.filter(o=>o.status==='active').length,icon:'target',color:T.accent,view:'objectives',hint:'active'},
     {label:'Tareas',val:pendingTasks,icon:'check',color:T.orange,view:'projects',hint:'pending'},
     {label:'Inbox',val:inboxUnread,icon:'inbox',color:T.red,view:'inbox',hint:'unread'},
-    {label:'Hábitos hoy',val:`${todayHabits}/${data.habits.length}`,icon:'habit',color:T.green,view:'habits',hint:'today'},
+    {label:'Hábitos hoy',val:`${todayDoneHabits.length}/${dailyHabits.length}`,icon:'habit',color:T.green,view:'habits',hint:'today'},
     {label:'Notas',val:data.notes.length,icon:'note',color:T.purple,view:'notes',hint:null},
   ];
+
+  // Top 3 urgent tasks sorted by due date
+  const urgentTasks=[...data.tasks.filter(t=>t.status!=='done')]
+    .sort((a,b)=>{
+      if(!a.dueDate&&!b.dueDate)return 0;
+      if(!a.dueDate)return 1;
+      if(!b.dueDate)return -1;
+      return a.dueDate.localeCompare(b.dueDate);
+    }).slice(0,3);
+
+  const daysUntil=(d)=>{
+    if(!d)return{label:'Sin fecha',color:T.dim};
+    const diff=Math.ceil((new Date(d)-new Date(todayStr))/86400000);
+    if(diff<0)return{label:`${Math.abs(diff)}d vencida`,color:T.red};
+    if(diff===0)return{label:'Hoy',color:T.red};
+    if(diff===1)return{label:'Mañana',color:T.orange};
+    return{label:`${diff}d`,color:T.muted};
+  };
+  const priorityColor=p=>p==='alta'?T.red:p==='media'?T.orange:T.accent;
+
+  // Balance current month
+  const curMonth=todayStr.slice(0,7);
+  const curMonthTxs=(data.transactions||[]).filter(t=>t.date?.slice(0,7)===curMonth);
+  const totalIncome=curMonthTxs.filter(t=>t.type==='ingreso').reduce((s,t)=>s+(t.amount||0),0);
+  const totalExpense=curMonthTxs.filter(t=>t.type==='egreso').reduce((s,t)=>s+(t.amount||0),0);
+  const balance=totalIncome-totalExpense;
+
+  // Weekly review stats (last 7 days)
+  const last7=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
+  const tasksDone7=data.tasks.filter(t=>t.status==='done'&&last7.includes(t.createdAt)).length;
+  const notesCap7=data.notes.filter(n=>last7.includes(n.createdAt)).length;
+  const habitDays7=data.habits.reduce((s,hb)=>s+last7.filter(d=>hb.completions.includes(d)).length,0);
+  const habitPoss7=dailyHabits.length*7;
+  const habitWeekPct=habitPoss7?Math.round(habitDays7/habitPoss7*100):0;
+  const inboxDone=data.inbox.filter(i=>i.processed).length;
+  const inboxTotal=data.inbox.length;
+  const inboxPct=inboxTotal?Math.round(inboxDone/inboxTotal*100):100;
+
   const recentNotes=[...data.notes].sort((a,b)=>b.createdAt>a.createdAt?1:-1).slice(0,3);
-  const pendingList=data.tasks.filter(t=>t.status!=='done').slice(0,5);
+
   return (
     <div>
-      <h2 style={{color:T.text,marginTop:0,fontSize:isMobile?20:24,fontWeight:700,marginBottom:2}}>{(()=>{const h=new Date().getHours();return h<12?'Buenos días 🌅':h<18?'Buenas tardes ☀️':'Buenas noches 🌙';})()}</h2>
+      <h2 style={{color:T.text,marginTop:0,fontSize:isMobile?20:24,fontWeight:700,marginBottom:2}}>{greeting}</h2>
       <p style={{color:T.muted,marginBottom:20,fontSize:13}}>{new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}</p>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:20}}>
+
+      {/* Stats grid */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
         {stats.map(s=>(
           <Card key={s.label} onClick={onNavigate?()=>onNavigate(s.view,s.hint):undefined} style={{textAlign:'center',padding:isMobile?12:16}}>
             <div style={{marginBottom:6,color:s.color}}><Icon name={s.icon} size={isMobile?18:22} color={s.color}/></div>
@@ -279,53 +482,153 @@ const Dashboard = ({data,isMobile,onNavigate}) => {
           </Card>
         ))}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:16}}>
-        <div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-            <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>Próximas tareas</h3>
-            <button onClick={()=>onNavigate&&onNavigate('projects',null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>Ver todas</button>
-          </div>
-          {pendingList.length===0
-            ?<div style={{textAlign:'center',padding:'16px 0'}}>
-               <p style={{color:T.dim,fontSize:13,margin:'0 0 8px'}}>¡Sin tareas pendientes! 🎉</p>
-               <button onClick={()=>onNavigate&&onNavigate('projects',null)} style={{background:`${T.accent}18`,border:`1px solid ${T.accent}40`,borderRadius:8,padding:'6px 14px',cursor:'pointer',color:T.accent,fontSize:12,fontFamily:'inherit',fontWeight:600}}>+ Nueva tarea</button>
-             </div>
-            :pendingList.map(t=>(
-              <div key={t.id} onClick={()=>onNavigate&&onNavigate('projects','pending')}
-                style={{display:'flex',gap:8,alignItems:'flex-start',marginBottom:8,padding:'10px 12px',background:T.surface,borderRadius:10,cursor:'pointer',border:`1px solid ${T.border}`,transition:'border-color 0.15s'}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                <div style={{width:8,height:8,borderRadius:'50%',background:t.priority==='alta'?T.red:t.priority==='media'?T.accent:T.green,marginTop:5,flexShrink:0}}/>
-                <span style={{color:T.text,fontSize:13,flex:1}}>{t.title}</span>
-                {t.dueDate&&<span style={{color:T.muted,fontSize:11,flexShrink:0}}>{fmt(t.dueDate)}</span>}
+
+      {/* Habit rings + Balance row */}
+      {(dailyHabits.length>0||(data.transactions||[]).length>0)&&(
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:12,marginBottom:16}}>
+
+          {/* Habit rings widget */}
+          {dailyHabits.length>0&&(
+            <Card style={{padding:16}} onClick={()=>onNavigate&&onNavigate('habits',null)}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:13,color:T.text}}>Hábitos hoy</div>
+                  <div style={{fontSize:11,color:T.muted,marginTop:1}}>{todayDoneHabits.length}/{dailyHabits.length} completados</div>
+                </div>
+                <div style={{background:`${T.accent}18`,borderRadius:8,padding:'4px 10px'}}>
+                  <span style={{fontSize:12,fontWeight:700,color:T.accent}}>{habitPct}%</span>
+                </div>
               </div>
-            ))
-          }
+              <div style={{display:'flex',gap:10,flexWrap:'wrap',justifyContent:'flex-start'}}>
+                {dailyHabits.slice(0,6).map(hb=>{
+                  const done=hb.completions.includes(todayStr);
+                  const hColor=hb.color||T.accent;
+                  return (
+                    <Ring key={hb.id} pct={done?100:0} color={hColor} size={isMobile?48:54} stroke={4}
+                      label={hb.name.split(' ')[0]} sublabel={done?'✓':null}/>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
+          {/* Balance sparkline */}
+          <Card style={{padding:16}} onClick={()=>onNavigate&&onNavigate('areas',null)}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:13,color:T.text}}>Balance mensual</div>
+                <div style={{fontSize:isMobile?18:22,fontWeight:800,color:balance>=0?T.accent:T.red,marginTop:2}}>
+                  {balance>=0?'+':''}{(data.transactions||[]).length>0?`$${Math.abs(balance).toLocaleString()}`:'—'}
+                </div>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                <div style={{display:'flex',gap:5,alignItems:'center'}}>
+                  <div style={{width:6,height:6,borderRadius:1,background:T.accent}}/>
+                  <span style={{fontSize:9,color:T.muted}}>Ingresos</span>
+                </div>
+                <div style={{display:'flex',gap:5,alignItems:'center'}}>
+                  <div style={{width:6,height:6,borderRadius:1,background:T.red}}/>
+                  <span style={{fontSize:9,color:T.muted}}>Egresos</span>
+                </div>
+              </div>
+            </div>
+            {(data.transactions||[]).length>0
+              ?<BalanceSparkline transactions={data.transactions}/>
+              :<div style={{color:T.dim,fontSize:12,textAlign:'center',padding:'12px 0'}}>Registra transacciones en Finanzas →</div>
+            }
+          </Card>
         </div>
-        <div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,marginTop:isMobile?16:0}}>
-            <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>Notas recientes</h3>
-            <button onClick={()=>onNavigate&&onNavigate('notes',null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>Ver todas</button>
-          </div>
-          {recentNotes.length===0
-            ?<div style={{textAlign:'center',padding:'16px 0'}}>
-               <p style={{color:T.dim,fontSize:13,margin:'0 0 8px'}}>Sin notas aún</p>
-               <button onClick={()=>onNavigate&&onNavigate('notes',null)} style={{background:`${T.purple}18`,border:`1px solid ${T.purple}40`,borderRadius:8,padding:'6px 14px',cursor:'pointer',color:T.purple,fontSize:12,fontFamily:'inherit',fontWeight:600}}>+ Nueva nota</button>
-             </div>
-            :recentNotes.map(n=>(
+      )}
+
+      {/* Top 3 urgent tasks */}
+      <Card style={{marginBottom:16,padding:16}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>🎯 Tareas más urgentes</h3>
+          <button onClick={()=>onNavigate&&onNavigate('projects',null)}
+            style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>
+            Ver todas
+          </button>
+        </div>
+        {urgentTasks.length===0
+          ?<div style={{textAlign:'center',padding:'12px 0'}}>
+             <p style={{color:T.dim,fontSize:13,margin:'0 0 8px'}}>¡Sin tareas pendientes! 🎉</p>
+             <button onClick={()=>onNavigate&&onNavigate('projects',null)} style={{background:`${T.accent}18`,border:`1px solid ${T.accent}40`,borderRadius:8,padding:'6px 14px',cursor:'pointer',color:T.accent,fontSize:12,fontFamily:'inherit',fontWeight:600}}>+ Nueva tarea</button>
+           </div>
+          :urgentTasks.map((t,i)=>{
+            const area=data.areas.find(a=>a.id===t.projectId||a.id===t.areaId);
+            const due=daysUntil(t.dueDate);
+            return (
+              <div key={t.id} onClick={()=>onNavigate&&onNavigate('projects','pending')}
+                style={{display:'flex',alignItems:'center',gap:10,marginBottom:i<urgentTasks.length-1?8:0,
+                  padding:'10px 12px',background:T.surface2,borderRadius:10,cursor:'pointer',
+                  border:`1px solid ${T.border}`,borderLeft:`3px solid ${priorityColor(t.priority)}`,
+                  transition:'border-color 0.15s'}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.borderLeftColor=priorityColor(t.priority);}}>
+                <div style={{fontWeight:800,color:T.dim,fontSize:13,width:16,flexShrink:0}}>{i+1}</div>
+                <span style={{color:T.text,fontSize:13,flex:1,lineHeight:1.3}}>{t.title}</span>
+                <div style={{fontSize:11,fontWeight:700,color:due.color,background:`${due.color}15`,
+                  padding:'2px 8px',borderRadius:6,flexShrink:0,whiteSpace:'nowrap'}}>{due.label}</div>
+              </div>
+            );
+          })
+        }
+      </Card>
+
+      {/* Weekly review */}
+      <Card style={{marginBottom:16,padding:16}}>
+        <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:'0 0 12px'}}>📊 Revisión semanal</h3>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {[
+            {label:'Tareas cerradas',val:tasksDone7||'—',icon:'✅',color:T.accent},
+            {label:'Notas capturadas',val:notesCap7||'—',icon:'📝',color:T.purple},
+            {label:'Hábitos completados',val:`${habitWeekPct}%`,icon:'🔥',color:T.orange},
+            {label:'Inbox procesado',val:`${inboxPct}%`,icon:'📥',color:T.blue},
+          ].map(s=>(
+            <div key={s.label} style={{background:T.surface2,borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:10}}>
+              <span style={{fontSize:18}}>{s.icon}</span>
+              <div>
+                <div style={{fontSize:isMobile?15:18,fontWeight:800,color:s.color}}>{s.val}</div>
+                <div style={{fontSize:10,color:T.muted,marginTop:1}}>{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Recent notes */}
+      <div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <h3 style={{color:T.text,fontSize:14,fontWeight:600,margin:0}}>Notas recientes</h3>
+          <button onClick={()=>onNavigate&&onNavigate('notes',null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'inherit'}}>Ver todas</button>
+        </div>
+        {recentNotes.length===0
+          ?<div style={{textAlign:'center',padding:'16px 0'}}>
+             <p style={{color:T.dim,fontSize:13,margin:'0 0 8px'}}>Sin notas aún</p>
+             <button onClick={()=>onNavigate&&onNavigate('notes',null)} style={{background:`${T.purple}18`,border:`1px solid ${T.purple}40`,borderRadius:8,padding:'6px 14px',cursor:'pointer',color:T.purple,fontSize:12,fontFamily:'inherit',fontWeight:600}}>+ Nueva nota</button>
+           </div>
+          :recentNotes.map(n=>{
+            const area=data.areas.find(a=>a.id===n.areaId);
+            return (
               <div key={n.id} onClick={()=>onNavigate&&onNavigate('notes',n.id)}
-                style={{marginBottom:8,padding:'12px 14px',background:T.surface2,borderRadius:10,borderLeft:`3px solid ${T.accent}`,cursor:'pointer',transition:'opacity 0.15s'}}
+                style={{marginBottom:8,padding:'12px 14px',background:T.surface,borderRadius:10,
+                  borderLeft:`3px solid ${area?.color||T.accent}`,cursor:'pointer',
+                  border:`1px solid ${T.border}`,borderLeft:`3px solid ${area?.color||T.accent}`,
+                  transition:'opacity 0.15s'}}
                 onMouseEnter={e=>e.currentTarget.style.opacity='0.8'}
                 onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                   <div style={{color:T.text,fontSize:13,fontWeight:500,flex:1,minWidth:0}}>{n.title}</div>
                   {n.amount&&<span style={{color:T.green,fontSize:11,fontWeight:600,flexShrink:0,marginLeft:6}}>${n.amount}</span>}
                 </div>
-                <div style={{color:T.muted,fontSize:11,marginTop:3}}>{fmt(n.createdAt)}</div>
+                <div style={{display:'flex',gap:6,marginTop:4,alignItems:'center'}}>
+                  {area&&<span style={{fontSize:10,color:area.color}}>{area.icon} {area.name}</span>}
+                  <span style={{color:T.dim,fontSize:11}}>{fmt(n.createdAt)}</span>
+                </div>
               </div>
-            ))
-          }
-        </div>
+            );
+          })
+        }
       </div>
     </div>
   );
@@ -660,20 +963,23 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint,onNaviga
   const [taskModal,setTaskModal]=useState(false);
   const [projForm,setProjForm]=useState({title:'',objectiveId:'',areaId:'',status:'active'});
   const [taskForm,setTaskForm]=useState({title:'',priority:'media',dueDate:''});
-  const [objFilter,setObjFilter]=useState(null); // objectiveId filter
+  const [objFilter,setObjFilter]=useState(null);
+  const [kanbanView,setKanbanView]=useState(false);
+  const [listView,setListView]=useState('list');
+  const [filterPriority,setFilterPriority]=useState('all');
+  const [selectedTasks,setSelectedTasks]=useState([]);
+  const [dragTask,setDragTask]=useState(null);
+  const [expandedTask,setExpandedTask]=useState(null);
 
   const UNASSIGNED={id:'__unassigned__',title:'📥 Sin proyecto'};
   const unassignedTasks=data.tasks.filter(t=>!t.projectId);
 
-  // Smart nav: handle hints
   useEffect(()=>{
     if(viewHint==='pending'){
       if(unassignedTasks.length>0){setSelProject(UNASSIGNED);if(isMobile)setShowDetail(true);}
       onConsumeHint?.();
     } else if(typeof viewHint==='string'&&viewHint.startsWith('obj:')){
-      const oId=viewHint.slice(4);
-      setObjFilter(oId);
-      // pre-select first project of this objective if exists
+      const oId=viewHint.slice(4);setObjFilter(oId);
       const firstProj=data.projects.find(p=>p.objectiveId===oId);
       if(firstProj){setSelProject(firstProj);if(isMobile)setShowDetail(true);}
       else{setSelProject(null);setShowDetail(false);}
@@ -687,11 +993,10 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint,onNaviga
     setData(d=>({...d,projects:updated}));save('projects',updated);
     setProjModal(false);setProjForm({title:'',objectiveId:'',areaId:'',status:'active'});
   };
-
   const saveTask=()=>{
     if(!taskForm.title.trim()||!selProject)return;
     const pid=selProject.id==='__unassigned__'?'':selProject.id;
-    const updated=[...data.tasks,{id:uid(),projectId:pid,status:'todo',...taskForm}];
+    const updated=[...data.tasks,{id:uid(),projectId:pid,status:'todo',subtasks:[],...taskForm}];
     setData(d=>({...d,tasks:updated}));save('tasks',updated);
     setTaskModal(false);setTaskForm({title:'',priority:'media',dueDate:''});
   };
@@ -712,6 +1017,121 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint,onNaviga
   const pTasks=selProject?(isUnassigned?unassignedTasks:data.tasks.filter(t=>t.projectId===selProject.id)):[];
   const pColors={alta:T.red,media:T.accent,baja:T.green};
 
+  // Subtask toggle
+  const toggleSubtask=(taskId,subtaskId)=>{
+    const u=data.tasks.map(t=>{
+      if(t.id!==taskId)return t;
+      return {...t,subtasks:(t.subtasks||[]).map(s=>s.id!==subtaskId?s:{...s,done:!s.done})};
+    });
+    setData(d=>({...d,tasks:u}));save('tasks',u);
+  };
+
+  // Bulk action
+  const bulkMarkDone=()=>{
+    const u=data.tasks.map(t=>selectedTasks.includes(t.id)?{...t,status:'done'}:t);
+    setData(d=>({...d,tasks:u}));save('tasks',u);setSelectedTasks([]);
+  };
+
+  // Kanban move
+  const moveToStatus=(taskId,newStatus)=>{
+    const u=data.tasks.map(t=>t.id===taskId?{...t,status:newStatus}:t);
+    setData(d=>({...d,tasks:u}));save('tasks',u);
+  };
+
+  const KANBAN_COLS=[
+    {id:'todo',label:'Pendiente',color:T.muted},
+    {id:'in-progress',label:'En progreso',color:T.blue},
+    {id:'done',label:'Completado',color:T.accent},
+  ];
+
+  const filteredPTasks=pTasks.filter(t=>filterPriority==='all'||t.priority===filterPriority);
+  const totalPTasks=pTasks.length;
+  const donePTasks=pTasks.filter(t=>t.status==='done').length;
+  const donePct=totalPTasks?Math.round(donePTasks/totalPTasks*100):0;
+
+  const TaskRow=({t,showKanbanMove})=>{
+    const isExpanded=expandedTask===t.id;
+    const isSel=selectedTasks.includes(t.id);
+    const doneSubs=(t.subtasks||[]).filter(s=>s.done).length;
+    const totalSubs=(t.subtasks||[]).length;
+    return (
+      <div style={{marginBottom:8}}>
+        <div style={{display:'flex',gap:8,alignItems:'flex-start',padding:'10px 12px',background:isSel?`${T.accent}08`:T.surface2,borderRadius:10,border:`1px solid ${isSel?T.accent:T.border}`,transition:'all 0.15s'}}>
+          <input type="checkbox" checked={isSel} onChange={()=>setSelectedTasks(prev=>isSel?prev.filter(x=>x!==t.id):[...prev,t.id])}
+            style={{marginTop:3,accentColor:T.accent,cursor:'pointer',flexShrink:0}}/>
+          <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>setExpandedTask(isExpanded?null:t.id)}>
+            <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+              <button onClick={e=>{e.stopPropagation();toggleTask(t.id);}}
+                style={{width:18,height:18,borderRadius:4,border:`2px solid ${t.status==='done'?T.accent:T.border}`,background:t.status==='done'?T.accent:'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',marginTop:1}}>
+                {t.status==='done'&&<Icon name="check" size={10} color="#000"/>}
+              </button>
+              <span style={{color:t.status==='done'?T.muted:T.text,fontSize:13,flex:1,textDecoration:t.status==='done'?'line-through':'none',lineHeight:1.4}}>{t.title}</span>
+            </div>
+            <div style={{display:'flex',gap:6,marginTop:5,flexWrap:'wrap',alignItems:'center',paddingLeft:26}}>
+              <span style={{fontSize:10,fontWeight:700,color:pColors[t.priority]||T.muted,background:`${pColors[t.priority]||T.muted}18`,padding:'1px 7px',borderRadius:5}}>{t.priority||'media'}</span>
+              {t.dueDate&&<span style={{fontSize:10,color:T.dim}}>{fmt(t.dueDate)}</span>}
+              {totalSubs>0&&<span style={{fontSize:10,color:T.muted}}>{doneSubs}/{totalSubs} subtareas</span>}
+            </div>
+          </div>
+          <div style={{display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
+            {editTask===t.id
+              ?<Btn size="sm" onClick={saveEditTask}>✓</Btn>
+              :<button onClick={()=>startEditTask(t)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:3,display:'flex'}}><Icon name="pencil" size={12}/></button>
+            }
+            <button onClick={()=>delTask(t.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:3,display:'flex'}}><Icon name="trash" size={12}/></button>
+          </div>
+        </div>
+        {/* Subtask progress + expanded panel */}
+        {totalSubs>0&&(
+          <div style={{height:3,background:T.border,borderRadius:0,margin:'0 0 0 20px',overflow:'hidden'}}>
+            <div style={{height:'100%',width:`${(doneSubs/totalSubs)*100}%`,background:T.accent,transition:'width 0.3s'}}/>
+          </div>
+        )}
+        {isExpanded&&(
+          <div style={{background:`${T.accent}05`,border:`1px solid ${T.border}`,borderTop:'none',borderRadius:'0 0 10px 10px',padding:'10px 14px 10px 40px'}}>
+            {editTask===t.id?(
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <Input value={editTaskForm.title} onChange={v=>setEditTaskForm(f=>({...f,title:v}))} placeholder="Título"/>
+                <div style={{display:'flex',gap:8}}>
+                  <Select value={editTaskForm.priority} onChange={v=>setEditTaskForm(f=>({...f,priority:v}))} style={{flex:1}}>
+                    <option value="baja">🟢 Baja</option><option value="media">🟡 Media</option><option value="alta">🔴 Alta</option>
+                  </Select>
+                  <Input type="date" value={editTaskForm.dueDate} onChange={v=>setEditTaskForm(f=>({...f,dueDate:v}))} style={{flex:1}}/>
+                </div>
+              </div>
+            ):(
+              <>
+                {(t.subtasks||[]).length>0&&(
+                  <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:8}}>
+                    {(t.subtasks||[]).map(s=>(
+                      <div key={s.id} onClick={()=>toggleSubtask(t.id,s.id)}
+                        style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',padding:'2px 0'}}>
+                        <div style={{width:15,height:15,borderRadius:3,border:`1.5px solid ${s.done?T.accent:T.border}`,background:s.done?T.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                          {s.done&&<span style={{color:'#000',fontSize:9,fontWeight:900}}>✓</span>}
+                        </div>
+                        <span style={{fontSize:12,color:s.done?T.muted:T.text,textDecoration:s.done?'line-through':'none'}}>{s.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showKanbanMove&&(
+                  <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                    {KANBAN_COLS.filter(c=>c.id!==t.status).map(c=>(
+                      <button key={c.id} onClick={()=>moveToStatus(t.id,c.id)}
+                        style={{fontSize:10,padding:'3px 9px',borderRadius:6,border:`1px solid ${c.color}`,background:`${c.color}15`,color:c.color,cursor:'pointer',fontFamily:'inherit'}}>
+                        → {c.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const ProjModals=()=><>
     {projModal&&<Modal title="Nuevo proyecto" onClose={()=>setProjModal(false)}>
       <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -731,9 +1151,7 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint,onNaviga
       <div style={{display:'flex',flexDirection:'column',gap:14}}>
         <Input value={taskForm.title} onChange={v=>setTaskForm(f=>({...f,title:v}))} placeholder="¿Qué hay que hacer?"/>
         <Select value={taskForm.priority} onChange={v=>setTaskForm(f=>({...f,priority:v}))}>
-          <option value="baja">🟢 Baja</option>
-          <option value="media">🟡 Media</option>
-          <option value="alta">🔴 Alta</option>
+          <option value="baja">🟢 Baja</option><option value="media">🟡 Media</option><option value="alta">🔴 Alta</option>
         </Select>
         <Input type="date" value={taskForm.dueDate} onChange={v=>setTaskForm(f=>({...f,dueDate:v}))}/>
         <Btn onClick={saveTask} style={{width:'100%',justifyContent:'center'}}>Crear tarea</Btn>
@@ -743,138 +1161,177 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint,onNaviga
 
   const ProjectList=()=>{
     const filteredObj=objFilter?data.objectives.find(o=>o.id===objFilter):null;
-    const visibleProjects=objFilter
-      ?data.projects.filter(p=>p.objectiveId===objFilter)
-      :data.projects;
+    const visibleProjects=objFilter?data.projects.filter(p=>p.objectiveId===objFilter):data.projects;
     return (
     <div>
-      {!isMobile&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <span style={{color:T.muted,fontSize:12,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>Proyectos</span>
-        <button onClick={()=>setProjModal(true)} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',display:'flex'}}><Icon name="plus" size={16}/></button>
+      {filteredObj&&<div style={{background:`${T.purple}15`,border:`1px solid ${T.purple}30`,borderRadius:10,padding:'8px 14px',marginBottom:14,display:'flex',gap:8,alignItems:'center'}}>
+        <span style={{color:T.purple,fontSize:12}}>🎯 Filtrando por: <strong>{filteredObj.title}</strong></span>
+        <button onClick={()=>setObjFilter(null)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',fontSize:12}}>✕</button>
       </div>}
-      {filteredObj&&(
-        <div style={{marginBottom:12,padding:'8px 12px',background:`${T.accent}12`,border:`1px solid ${T.accent}30`,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-          <span style={{color:T.accent,fontSize:12,fontWeight:600}}>🎯 {filteredObj.title}</span>
-          <button onClick={()=>setObjFilter(null)} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit',padding:0}}>✕ Todos</button>
-        </div>
-      )}
-      {visibleProjects.map(p=>{
-        const tasks=data.tasks.filter(t=>t.projectId===p.id);
+      <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
+        <Btn onClick={()=>setProjModal(true)} size="sm" style={{flex:1,justifyContent:'center'}}><Icon name="plus" size={12}/>Proyecto</Btn>
+        {selProject&&<Btn onClick={()=>setTaskModal(true)} size="sm" variant="ghost" style={{flex:1,justifyContent:'center'}}><Icon name="plus" size={12}/>Tarea</Btn>}
+      </div>
+      {[UNASSIGNED,...visibleProjects].map(p=>{
+        const tasks=p.id==='__unassigned__'?unassignedTasks:data.tasks.filter(t=>t.projectId===p.id);
         const done=tasks.filter(t=>t.status==='done').length;
         const pct=tasks.length?Math.round(done/tasks.length*100):0;
+        const area=data.areas.find(a=>a.id===p.areaId);
+        const isActive=selProject?.id===p.id;
         return (
           <div key={p.id} onClick={()=>openProject(p)}
-            style={{padding:'12px 14px',borderRadius:10,cursor:'pointer',marginBottom:8,background:selProject?.id===p.id&&!isMobile?T.surface2:T.surface,border:`1px solid ${selProject?.id===p.id&&!isMobile?T.accent:T.border}`,transition:'border-color 0.15s'}}>
-            <div style={{color:T.text,fontSize:14,fontWeight:500,marginBottom:6}}>{p.title}</div>
-            <div style={{height:4,background:T.border,borderRadius:2,marginBottom:4}}>
-              <div style={{height:'100%',width:`${pct}%`,background:T.accent,borderRadius:2}}/>
+            style={{padding:'12px 14px',borderRadius:10,cursor:'pointer',marginBottom:8,background:isActive?T.surface2:T.surface,border:`1px solid ${isActive?T.accent:T.border}`,transition:'border-color 0.15s'}}
+            onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=isActive?T.accent:T.border}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
+              <div style={{color:T.text,fontSize:14,fontWeight:500,flex:1}}>{p.title}</div>
+              {p.id!=='__unassigned__'&&<button onClick={e=>{e.stopPropagation();if(window.confirm('¿Eliminar proyecto y sus tareas?'))delProj(p.id);}} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2}}><Icon name="trash" size={12}/></button>}
             </div>
-            <div style={{color:T.dim,fontSize:11}}>{done}/{tasks.length} completadas</div>
+            <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:tasks.length?6:0}}>
+              {area&&<span style={{fontSize:11,color:area.color}}>{area.icon} {area.name}</span>}
+              <span style={{fontSize:11,color:T.dim}}>{tasks.length} tareas · {done} hechas</span>
+            </div>
+            {tasks.length>0&&<div style={{height:3,background:T.border,borderRadius:2}}><div style={{height:'100%',width:`${pct}%`,background:pct===100?T.green:T.accent,borderRadius:2,transition:'width 0.3s'}}/></div>}
           </div>
         );
       })}
-      {!objFilter&&unassignedTasks.length>0&&(
-        <div onClick={()=>openProject(UNASSIGNED)}
-          style={{padding:'12px 14px',borderRadius:10,cursor:'pointer',marginBottom:8,background:selProject?.id==='__unassigned__'&&!isMobile?T.surface2:T.surface,border:`1px solid ${selProject?.id==='__unassigned__'&&!isMobile?T.accent:T.border}`,transition:'border-color 0.15s',borderStyle:'dashed'}}>
-          <div style={{color:T.muted,fontSize:14,fontWeight:500,marginBottom:4}}>📥 Sin proyecto</div>
-          <div style={{color:T.dim,fontSize:11}}>{unassignedTasks.filter(t=>t.status!=='done').length} pendientes</div>
-        </div>
-      )}
-      {!visibleProjects.length&&!(unassignedTasks.length&&!objFilter)&&(
-        <div style={{textAlign:'center',padding:'30px 0',color:T.dim}}>
-          <Icon name="folder" size={36}/>
-          <p style={{marginBottom:12}}>{filteredObj?`Sin proyectos para este objetivo`:'Sin proyectos'}</p>
-          <Btn size="sm" onClick={()=>setProjModal(true)}><Icon name="plus" size={12}/>Crear proyecto</Btn>
-        </div>
-      )}
+      {!visibleProjects.length&&!unassignedTasks.length&&<div style={{textAlign:'center',padding:'30px 0',color:T.dim}}>
+        <Icon name="grid" size={40}/><p style={{marginTop:8,fontSize:13}}>Sin proyectos aún</p>
+        <Btn size="sm" onClick={()=>setProjModal(true)} style={{marginTop:8}}><Icon name="plus" size={12}/>Nuevo proyecto</Btn>
+      </div>}
     </div>
-  );}
+  );};
 
-  const TaskDetail=()=>(
+  const TaskDetail=()=>{
+    if(!selProject) return <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',color:T.dim,textAlign:'center'}}><Icon name="check" size={48}/><p style={{marginTop:8}}>Selecciona un proyecto</p></div>;
+
+    return (
     <div>
-      {isMobile&&<button onClick={()=>setShowDetail(false)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:T.muted,cursor:'pointer',marginBottom:16,fontSize:14,padding:0}}>
-        <Icon name="back" size={18}/>Proyectos
-      </button>}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <h3 style={{margin:0,color:T.text,fontSize:isMobile?18:16,fontWeight:700}}>{selProject?.title}</h3>
-        <div style={{display:'flex',gap:8}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div>
+          <h3 style={{color:T.text,fontSize:16,fontWeight:700,margin:0}}>{selProject.title}</h3>
+          {totalPTasks>0&&<div style={{fontSize:11,color:T.muted,marginTop:2}}>{donePct}% completado</div>}
+        </div>
+        <div style={{display:'flex',gap:6}}>
+          <button onClick={()=>setListView(listView==='list'?'kanban':'list')}
+            style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+            {listView==='list'?'⬜ Kanban':'☰ Lista'}
+          </button>
           <Btn size="sm" onClick={()=>setTaskModal(true)}><Icon name="plus" size={12}/>Tarea</Btn>
-          {!isUnassigned&&<Btn size="sm" variant="danger" onClick={()=>delProj(selProject.id)}><Icon name="trash" size={12}/></Btn>}
         </div>
       </div>
-      {['todo','done'].map(st=>{
-        const list=pTasks.filter(t=>t.status===st);
-        return (
-          <div key={st} style={{marginBottom:12}}>
-            {st==='done'&&list.length>0&&<div style={{color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:8}}>Completadas</div>}
-            {list.map(t=>(
-              <div key={t.id} style={{background:T.surface,border:`1px solid ${editTask===t.id?T.accent:T.border}`,borderRadius:10,marginBottom:8,opacity:st==='done'?0.6:1,overflow:'hidden'}}>
-                {editTask===t.id?(
-                  <div style={{padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>
-                    <Input value={editTaskForm.title} onChange={v=>setEditTaskForm(f=>({...f,title:v}))} placeholder="Título de la tarea"/>
-                    <div style={{display:'flex',gap:8}}>
-                      <Select value={editTaskForm.priority} onChange={v=>setEditTaskForm(f=>({...f,priority:v}))} style={{flex:1,padding:'6px 10px',fontSize:13}}>
-                        <option value="baja">🟢 Baja</option>
-                        <option value="media">🟡 Media</option>
-                        <option value="alta">🔴 Alta</option>
-                      </Select>
-                      <Input type="date" value={editTaskForm.dueDate} onChange={v=>setEditTaskForm(f=>({...f,dueDate:v}))} style={{flex:1,padding:'6px 10px',fontSize:13}}/>
-                    </div>
-                    <div style={{display:'flex',gap:8}}>
-                      <Btn onClick={saveEditTask} size="sm" style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
-                      <Btn variant="ghost" onClick={()=>setEditTask(null)} size="sm" style={{flex:1,justifyContent:'center'}}>Cancelar</Btn>
-                    </div>
-                  </div>
-                ):(
-                  <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px'}}>
-                    <button onClick={()=>toggleTask(t.id)} style={{width:22,height:22,borderRadius:'50%',border:`2px solid ${st==='done'?T.green:T.border}`,background:st==='done'?T.green:'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                      {st==='done'&&<Icon name="check" size={11} color="#000"/>}
-                    </button>
-                    <div style={{width:8,height:8,borderRadius:'50%',background:pColors[t.priority]||T.muted,flexShrink:0}}/>
-                    <span style={{color:T.text,fontSize:14,flex:1,textDecoration:st==='done'?'line-through':'none'}}>{t.title}</span>
-                    {t.dueDate&&<span style={{color:t.dueDate<today()&&st!=='done'?T.red:T.muted,fontSize:11}}>{fmt(t.dueDate)}</span>}
-                    {st!=='done'&&<button onClick={()=>startEditTask(t)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',display:'flex',padding:4,fontSize:12}}>✏️</button>}
-                    <button onClick={()=>delTask(t.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',display:'flex',padding:4}}><Icon name="trash" size={14}/></button>
-                  </div>
-                )}
+
+      {/* Progress + filters */}
+      {totalPTasks>0&&<div style={{height:4,background:T.border,borderRadius:2,marginBottom:12,overflow:'hidden'}}><div style={{height:'100%',width:`${donePct}%`,background:T.accent,borderRadius:2,transition:'width 0.4s'}}/></div>}
+
+      <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+        <div style={{display:'flex',gap:4}}>
+          {[['all','Todos'],['alta','Alta'],['media','Media'],['baja','Baja']].map(([v,l])=>(
+            <button key={v} onClick={()=>setFilterPriority(v)}
+              style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${filterPriority===v?(v==='alta'?T.red:v==='media'?T.accent:v==='baja'?T.green:T.accent):T.border}`,
+                background:filterPriority===v?(v==='alta'?`${T.red}18`:v==='media'?`${T.accent}18`:v==='baja'?`${T.green}18`:`${T.accent}18`):'transparent',
+                color:filterPriority===v?(v==='alta'?T.red:v==='media'?T.accent:v==='baja'?T.green:T.accent):T.muted,
+                cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {selectedTasks.length>0&&(
+          <button onClick={bulkMarkDone}
+            style={{marginLeft:'auto',padding:'4px 12px',borderRadius:8,border:`1px solid ${T.accent}`,background:`${T.accent}15`,color:T.accent,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>
+            ✓ Marcar {selectedTasks.length} como listas
+          </button>
+        )}
+      </div>
+
+      {/* LIST VIEW */}
+      {listView==='list'&&(
+        <div>
+          {['todo','in-progress','done'].map(status=>{
+            const stTasks=filteredPTasks.filter(t=>t.status===status||(status==='todo'&&!t.status));
+            const col=KANBAN_COLS.find(c=>c.id===status);
+            if(!stTasks.length)return null;
+            return (
+              <div key={status} style={{marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:700,color:col?.color||T.muted,textTransform:'uppercase',letterSpacing:1,marginBottom:8}}>{col?.label||status} ({stTasks.length})</div>
+                {stTasks.map(t=><TaskRow key={t.id} t={t} showKanbanMove={true}/>)}
               </div>
-            ))}
-          </div>
-        );
-      })}
-      {!pTasks.length&&<div style={{textAlign:'center',padding:'30px 0',color:T.dim}}><Icon name="check" size={36}/><p>Sin tareas. ¡Añade la primera!</p></div>}
+            );
+          })}
+          {!filteredPTasks.length&&<div style={{textAlign:'center',padding:'24px 0',color:T.dim,fontSize:13}}>Sin tareas{filterPriority!=='all'?' con esta prioridad':''}</div>}
+        </div>
+      )}
+
+      {/* KANBAN VIEW */}
+      {listView==='kanban'&&(
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+          {KANBAN_COLS.map(col=>(
+            <div key={col.id}
+              onDragOver={e=>e.preventDefault()}
+              onDrop={()=>{if(dragTask){moveToStatus(dragTask,col.id);setDragTask(null);}}}
+              style={{background:T.surface2,borderRadius:10,padding:'8px 6px',border:`1px solid ${T.border}`,minHeight:120}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,padding:'0 4px'}}>
+                <span style={{fontSize:11,fontWeight:700,color:col.color,textTransform:'uppercase',letterSpacing:0.5}}>{col.label}</span>
+                <span style={{fontSize:10,color:T.muted,background:T.border,borderRadius:8,padding:'1px 6px'}}>{filteredPTasks.filter(t=>(t.status||'todo')===col.id).length}</span>
+              </div>
+              {filteredPTasks.filter(t=>(t.status||'todo')===col.id).map(t=>(
+                <div key={t.id} draggable onDragStart={()=>setDragTask(t.id)}
+                  style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:'9px 10px',marginBottom:6,cursor:'grab',opacity:dragTask===t.id?0.4:1}}>
+                  <div style={{fontSize:12,color:T.text,lineHeight:1.4,marginBottom:5}}>{t.title}</div>
+                  <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                    <span style={{fontSize:10,color:pColors[t.priority]||T.muted,fontWeight:600}}>{t.priority||'media'}</span>
+                    {t.dueDate&&<span style={{fontSize:10,color:T.dim}}>{fmt(t.dueDate)}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-  );
+  );};
 
   if(isMobile) return (
     <div>
-      <PageHeader title="Proyectos & Tareas" isMobile={isMobile}
-        action={!showDetail&&<Btn onClick={()=>setProjModal(true)} size="sm"><Icon name="plus" size={14}/>Nuevo</Btn>}/>
+      {!showDetail&&<PageHeader title="Proyectos & Tareas" isMobile={isMobile}/>}
+      {showDetail&&selProject&&<div style={{marginBottom:12}}><button onClick={()=>{setShowDetail(false);}} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:14,padding:0}}><Icon name="back" size={18}/>Proyectos</button></div>}
       {showDetail&&selProject?<TaskDetail/>:<ProjectList/>}
       <ProjModals/>
     </div>
   );
 
   return (
-    <div style={{display:'grid',gridTemplateColumns:'250px 1fr',gap:16,minHeight:400}}>
+    <div style={{display:'grid',gridTemplateColumns:'260px 1fr',gap:16,minHeight:400}}>
       <ProjectList/>
-      <div>
-        {selProject?<TaskDetail/>:<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',color:T.dim,textAlign:'center'}}><Icon name="folder" size={48}/><p>Selecciona un proyecto</p></div>}
-      </div>
+      <TaskDetail/>
       <ProjModals/>
     </div>
   );
 };
 
+
 // ===================== NOTES =====================
+const NOTE_TEMPLATES=[
+  {id:'tpl1',name:'Reunión',icon:'🤝',content:`# Reunión — [Título]\n**Fecha:** \n**Asistentes:** \n\n## Agenda\n- \n\n## Decisiones\n- \n\n## Próximos pasos\n- [ ] `},
+  {id:'tpl2',name:'Reflexión',icon:'💭',content:`# Reflexión — [Fecha]\n\n## ¿Qué salió bien?\n\n## ¿Qué mejorar?\n\n## ¿Qué aprendí?\n\n## Intención para mañana\n`},
+  {id:'tpl3',name:'Proyecto',icon:'🚀',content:`# [Nombre del proyecto]\n\n**Objetivo:** \n**Deadline:** \n**Área:** \n\n## Contexto\n\n## Tareas\n- [ ] \n- [ ] \n\n## Notas\n`},
+  {id:'tpl4',name:'Receta',icon:'🍳',content:`# [Nombre del platillo]\n\n**Tiempo:** min | **Porciones:** \n\n## Ingredientes\n- \n\n## Preparación\n1. \n`},
+  {id:'tpl5',name:'Libro',icon:'📚',content:`# [Título del libro]\n**Autor:** \n**Estado:** Leyendo\n\n## Ideas clave\n- \n\n## Citas destacadas\n> \n\n## Acciones a tomar\n- [ ] `},
+];
+
 const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
   const [sel,setSel]=useState(null);
   const [showNote,setShowNote]=useState(false);
   const [modal,setModal]=useState(false);
+  const [showTemplates,setShowTemplates]=useState(false);
   const [form,setForm]=useState({title:'',content:'',tags:'',areaId:''});
   const [search,setSearch]=useState('');
   const [editing,setEditing]=useState(false);
   const [editForm,setEditForm]=useState({title:'',content:'',tags:'',areaId:''});
+  const [mdPreview,setMdPreview]=useState(true);
+  const [filterArea,setFilterArea]=useState('all');
+  const [filterTag,setFilterTag]=useState('all');
+  const [sortBy,setSortBy]=useState('date');
 
   useEffect(()=>{
     if(viewHint&&viewHint!=='null'){
@@ -892,6 +1349,10 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
     setModal(false);setForm({title:'',content:'',tags:'',areaId:''});
     setSel(n);if(isMobile)setShowNote(true);
   };
+  const applyTemplate=(tpl)=>{
+    setForm(f=>({...f,content:tpl.content}));
+    setShowTemplates(false);setModal(true);
+  };
   const startEdit=(n)=>{
     setEditForm({title:n.title,content:n.content,tags:(n.tags||[]).join(', '),areaId:n.areaId||''});
     setEditing(true);
@@ -900,8 +1361,7 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
     if(!editForm.title.trim())return;
     const updated=data.notes.map(n=>n.id===sel.id?{...n,...editForm,tags:editForm.tags.split(',').map(t=>t.trim()).filter(Boolean)}:n);
     setData(d=>({...d,notes:updated}));save('notes',updated);
-    setSel(updated.find(n=>n.id===sel.id));
-    setEditing(false);
+    setSel(updated.find(n=>n.id===sel.id));setEditing(false);
   };
   const del=(id)=>{
     if(!window.confirm('¿Eliminar esta nota?'))return;
@@ -909,68 +1369,151 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
     setData(d=>({...d,notes:updated}));save('notes',updated);
     if(sel?.id===id){setSel(null);setShowNote(false);}
   };
-  const filtered=data.notes.filter(n=>{
+
+  // All unique tags
+  const allTags=[...new Set(data.notes.flatMap(n=>n.tags||[]))];
+
+  // Filter + sort
+  let filtered=data.notes.filter(n=>{
     const q=search.toLowerCase();
-    return n.title.toLowerCase().includes(q)||n.content.toLowerCase().includes(q)||(n.tags||[]).some(t=>t.toLowerCase().includes(q));
+    const matchQ=!q||n.title.toLowerCase().includes(q)||n.content.toLowerCase().includes(q)||(n.tags||[]).some(t=>t.toLowerCase().includes(q));
+    const matchArea=filterArea==='all'||n.areaId===filterArea;
+    const matchTag=filterTag==='all'||(n.tags||[]).includes(filterTag);
+    return matchQ&&matchArea&&matchTag;
   });
+  if(sortBy==='date')filtered=[...filtered].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  if(sortBy==='title')filtered=[...filtered].sort((a,b)=>a.title.localeCompare(b.title));
+  if(sortBy==='area')filtered=[...filtered].sort((a,b)=>(a.areaId||'').localeCompare(b.areaId||''));
 
   const NoteList=()=>(
     <div>
-      <Input value={search} onChange={setSearch} placeholder="🔍 Buscar..." style={{marginBottom:12,fontSize:14}}/>
-      <Btn onClick={()=>setModal(true)} style={{width:'100%',justifyContent:'center',marginBottom:14}} size="sm"><Icon name="plus" size={12}/>Nueva nota</Btn>
-      {filtered.map(n=>(
-        <div key={n.id} onClick={()=>{setSel(n);if(isMobile)setShowNote(true);}}
-          style={{padding:'12px 14px',borderRadius:10,cursor:'pointer',marginBottom:8,background:sel?.id===n.id&&!isMobile?T.surface2:T.surface,border:`1px solid ${sel?.id===n.id&&!isMobile?T.accent:T.border}`,transition:'border-color 0.15s'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-            <div style={{color:T.text,fontSize:14,fontWeight:500,marginBottom:2,flex:1,minWidth:0}}>{n.title}</div>
-            {n.amount&&<span style={{color:T.green,fontSize:12,fontWeight:600,flexShrink:0,marginLeft:8}}>💰 ${n.amount}</span>}
+      <Input value={search} onChange={setSearch} placeholder="🔍 Buscar..." style={{marginBottom:10,fontSize:14}}/>
+      {/* Filters row */}
+      <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>
+        <select value={filterArea} onChange={e=>setFilterArea(e.target.value)}
+          style={{flex:1,minWidth:100,background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'6px 10px',borderRadius:9,fontSize:12,outline:'none'}}>
+          <option value="all">Todas las áreas</option>
+          {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+        </select>
+        {allTags.length>0&&(
+          <select value={filterTag} onChange={e=>setFilterTag(e.target.value)}
+            style={{flex:1,minWidth:90,background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'6px 10px',borderRadius:9,fontSize:12,outline:'none'}}>
+            <option value="all">Todos los tags</option>
+            {allTags.map(t=><option key={t} value={t}>#{t}</option>)}
+          </select>
+        )}
+        <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+          style={{background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'6px 10px',borderRadius:9,fontSize:12,outline:'none'}}>
+          <option value="date">↓ Reciente</option>
+          <option value="title">A-Z</option>
+          <option value="area">Área</option>
+        </select>
+      </div>
+      {/* Actions */}
+      <div style={{display:'flex',gap:8,marginBottom:14}}>
+        <button onClick={()=>setShowTemplates(true)}
+          style={{flex:1,padding:'7px',border:`1px solid ${T.border}`,borderRadius:9,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
+          📋 Plantilla
+        </button>
+        <Btn onClick={()=>setModal(true)} size="sm" style={{flex:1,justifyContent:'center'}}><Icon name="plus" size={12}/>Nueva nota</Btn>
+      </div>
+      {filtered.map(n=>{
+        const area=data.areas.find(a=>a.id===n.areaId);
+        return (
+          <div key={n.id} onClick={()=>{setSel(n);if(isMobile)setShowNote(true);}}
+            style={{padding:'12px 14px',borderRadius:10,cursor:'pointer',marginBottom:8,
+              background:sel?.id===n.id&&!isMobile?T.surface2:T.surface,
+              border:`1px solid ${sel?.id===n.id&&!isMobile?T.accent:T.border}`,
+              borderLeft:`3px solid ${area?.color||T.accent}`,
+              transition:'border-color 0.15s'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div style={{color:T.text,fontSize:14,fontWeight:500,marginBottom:2,flex:1,minWidth:0}}>{n.title}</div>
+              {n.amount&&<span style={{color:T.green,fontSize:12,fontWeight:600,flexShrink:0,marginLeft:8}}>💰 ${n.amount}</span>}
+            </div>
+            <div style={{color:T.muted,fontSize:12,marginBottom:4}}>{n.content.replace(/[#*\-\[\]]/g,'').slice(0,55)}{n.content.length>55?'...':''}</div>
+            <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+              {area&&<span style={{fontSize:10,color:area.color,background:`${area.color}15`,padding:'1px 6px',borderRadius:4}}>{area.icon} {area.name}</span>}
+              <span style={{color:T.dim,fontSize:11}}>{fmt(n.createdAt)}</span>
+              {n.tags?.slice(0,2).map(t=><span key={t} style={{fontSize:10,color:T.accent,background:`${T.accent}15`,padding:'1px 6px',borderRadius:8}}>{t}</span>)}
+            </div>
           </div>
-          <div style={{color:T.muted,fontSize:12,marginBottom:3}}>{n.content.slice(0,60)}{n.content.length>60?'...':''}</div>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <span style={{color:T.dim,fontSize:11}}>{fmt(n.createdAt)}</span>
-            {n.tags?.slice(0,3).map(t=><span key={t} style={{fontSize:10,color:T.accent,background:`${T.accent}15`,padding:'1px 6px',borderRadius:8}}>{t}</span>)}
-          </div>
-        </div>
-      ))}
+        );
+      })}
       {!filtered.length&&<p style={{color:T.dim,fontSize:13,textAlign:'center',padding:'20px 0'}}>Sin notas</p>}
     </div>
   );
 
   const NoteView=()=>(
-    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:20}}>
-      {isMobile&&<button onClick={()=>{setShowNote(false);setEditing(false);}} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:T.muted,cursor:'pointer',marginBottom:16,fontSize:14,padding:0}}><Icon name="back" size={18}/>Notas</button>}
-      {editing?(
-        <div style={{display:'flex',flexDirection:'column',gap:12}}>
-          <Input value={editForm.title} onChange={v=>setEditForm(f=>({...f,title:v}))} placeholder="Título"/>
-          <Textarea value={editForm.content} onChange={v=>setEditForm(f=>({...f,content:v}))} placeholder="Contenido..." rows={6}/>
-          <Input value={editForm.tags} onChange={v=>setEditForm(f=>({...f,tags:v}))} placeholder="Tags (separados por coma)"/>
-          <Select value={editForm.areaId} onChange={v=>setEditForm(f=>({...f,areaId:v}))}>
-            <option value="">Sin área</option>
-            {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
-          </Select>
-          <div style={{display:'flex',gap:10}}>
-            <Btn onClick={saveEdit} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
-            <Btn variant="ghost" onClick={()=>setEditing(false)} style={{flex:1,justifyContent:'center'}}>Cancelar</Btn>
-          </div>
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,overflow:'hidden'}}>
+      {/* Toolbar */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 16px',borderBottom:`1px solid ${T.border}`,background:T.surface2}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {isMobile&&(
+            <button onClick={()=>{setShowNote(false);setEditing(false);}}
+              style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:13,padding:0,fontFamily:'inherit'}}>
+              <Icon name="back" size={16}/>
+            </button>
+          )}
+          {!editing&&(
+            <button onClick={()=>setMdPreview(!mdPreview)}
+              style={{padding:'4px 10px',borderRadius:7,border:`1px solid ${T.border}`,
+                background:mdPreview?`${T.accent}18`:'transparent',
+                color:mdPreview?T.accent:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+              {mdPreview?'👁 Preview':'{ } Raw'}
+            </button>
+          )}
         </div>
-      ):(
-        <>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
-            <h3 style={{margin:0,color:T.text,fontSize:18,fontWeight:700,flex:1}}>{sel?.title}</h3>
-            <div style={{display:'flex',gap:4}}>
-              <button onClick={()=>startEdit(sel)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.muted,cursor:'pointer',display:'flex',padding:'4px 10px',fontSize:12,fontFamily:'inherit',gap:4,alignItems:'center'}}>✏️ Editar</button>
-              <button onClick={()=>del(sel.id)} style={{background:'none',border:'none',color:T.red,cursor:'pointer',display:'flex',padding:4}}><Icon name="trash" size={16}/></button>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          {!editing
+            ?<button onClick={()=>startEdit(sel)}
+               style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.muted,cursor:'pointer',display:'flex',padding:'4px 10px',fontSize:12,fontFamily:'inherit',gap:4,alignItems:'center'}}>✏️ Editar</button>
+            :<>
+              <Btn onClick={saveEdit} size="sm">Guardar</Btn>
+              <Btn variant="ghost" size="sm" onClick={()=>setEditing(false)}>Cancelar</Btn>
+            </>
+          }
+          {!editing&&<button onClick={()=>del(sel.id)} style={{background:'none',border:'none',color:T.red,cursor:'pointer',display:'flex',padding:4}}><Icon name="trash" size={16}/></button>}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{padding:20}}>
+        {editing?(
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Input value={editForm.title} onChange={v=>setEditForm(f=>({...f,title:v}))} placeholder="Título"/>
+            <div style={{position:'relative'}}>
+              <textarea value={editForm.content} onChange={e=>setEditForm(f=>({...f,content:e.target.value}))}
+                placeholder="Escribe en Markdown... **negrita**, ## encabezado, - lista, - [ ] tarea"
+                rows={8}
+                style={{width:'100%',background:T.bg,border:`1px solid ${T.border}`,color:T.text,
+                  padding:'10px 14px',borderRadius:10,fontSize:14,outline:'none',
+                  resize:'vertical',fontFamily:'monospace',boxSizing:'border-box',lineHeight:1.6}}/>
             </div>
+            <Input value={editForm.tags} onChange={v=>setEditForm(f=>({...f,tags:v}))} placeholder="Tags (separados por coma)"/>
+            <Select value={editForm.areaId} onChange={v=>setEditForm(f=>({...f,areaId:v}))}>
+              <option value="">Sin área</option>
+              {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+            </Select>
           </div>
-          <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
-            {sel?.tags?.map(t=><Tag key={t} text={t}/>)}
-            {sel?.areaId&&(()=>{const a=data.areas.find(x=>x.id===sel.areaId);return a?<Tag text={`${a.icon} ${a.name}`} color={a.color}/>:null;})()}
-            {sel?.amount&&<Tag text={`💰 $${sel.amount} ${sel.currency||'MXN'}`} color={T.green}/>}
-            <span style={{color:T.dim,fontSize:12,alignSelf:'center'}}>{fmt(sel?.createdAt)}</span>
-          </div>
-          <p style={{color:T.text,fontSize:15,lineHeight:1.8,whiteSpace:'pre-wrap',margin:0}}>{sel?.content}</p>
-        </>
-      )}
+        ):(
+          <>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
+              <h3 style={{margin:0,color:T.text,fontSize:18,fontWeight:700,flex:1}}>{sel?.title}</h3>
+            </div>
+            <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
+              {sel?.tags?.map(t=><Tag key={t} text={t}/>)}
+              {sel?.areaId&&(()=>{const a=data.areas.find(x=>x.id===sel.areaId);return a?<Tag text={`${a.icon} ${a.name}`} color={a.color}/>:null;})()}
+              {sel?.amount&&<Tag text={`💰 $${sel.amount} ${sel.currency||'MXN'}`} color={T.green}/>}
+              <span style={{color:T.dim,fontSize:12,alignSelf:'center'}}>{fmt(sel?.createdAt)}</span>
+            </div>
+            {mdPreview
+              ?<div style={{fontSize:14,lineHeight:1.8,color:T.text}}
+                  dangerouslySetInnerHTML={{__html:renderMd(sel?.content||'')}}/>
+              :<pre style={{fontSize:13,color:T.muted,whiteSpace:'pre-wrap',fontFamily:'monospace',margin:0,lineHeight:1.6}}>{sel?.content}</pre>
+            }
+          </>
+        )}
+      </div>
     </div>
   );
 
@@ -978,7 +1521,14 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
     <Modal title="Nueva nota" onClose={()=>setModal(false)}>
       <div style={{display:'flex',flexDirection:'column',gap:14}}>
         <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Título"/>
-        <Textarea value={form.content} onChange={v=>setForm(f=>({...f,content:v}))} placeholder="Escribe tu nota..." rows={5}/>
+        <div>
+          <textarea value={form.content} onChange={e=>setForm(f=>({...f,content:e.target.value}))}
+            placeholder="Escribe en Markdown... **negrita**, ## encabezado, - lista, - [ ] tarea" rows={6}
+            style={{width:'100%',background:T.bg,border:`1px solid ${T.border}`,color:T.text,
+              padding:'10px 14px',borderRadius:10,fontSize:14,outline:'none',
+              resize:'vertical',fontFamily:'monospace',boxSizing:'border-box',lineHeight:1.6}}/>
+          <div style={{fontSize:11,color:T.dim,marginTop:4}}>Soporta Markdown: **negrita**, ## encabezado, - [ ] tarea</div>
+        </div>
         <Input value={form.tags} onChange={v=>setForm(f=>({...f,tags:v}))} placeholder="Tags (separados por coma)"/>
         <Select value={form.areaId} onChange={v=>setForm(f=>({...f,areaId:v}))}>
           <option value="">Sin área</option>
@@ -989,19 +1539,39 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
     </Modal>
   ):null;
 
+  const TemplatesModal=()=>showTemplates?(
+    <Modal title="📋 Plantillas" onClose={()=>setShowTemplates(false)}>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {NOTE_TEMPLATES.map(tpl=>(
+          <button key={tpl.id} onClick={()=>applyTemplate(tpl)}
+            style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',
+              borderRadius:12,border:`1px solid ${T.border}`,background:T.surface2,
+              cursor:'pointer',textAlign:'left',fontFamily:'inherit',width:'100%',transition:'all 0.15s'}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.background=`${T.accent}10`;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.surface2;}}>
+            <span style={{fontSize:24}}>{tpl.icon}</span>
+            <span style={{color:T.text,fontSize:14,fontWeight:600}}>{tpl.name}</span>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  ):null;
+
   if(isMobile) return (
     <div>
       {!showNote&&<PageHeader title="Notas" isMobile={isMobile}/>}
       {showNote&&sel?<NoteView/>:<NoteList/>}
-      <NoteModal/>
+      <NoteModal/><TemplatesModal/>
     </div>
   );
 
   return (
-    <div style={{display:'grid',gridTemplateColumns:'260px 1fr',gap:16,minHeight:400}}>
+    <div style={{display:'grid',gridTemplateColumns:'280px 1fr',gap:16,minHeight:400}}>
       <NoteList/>
-      <div>{sel?<NoteView/>:<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',color:T.dim,textAlign:'center'}}><Icon name="note" size={48}/><p>Selecciona una nota</p></div>}</div>
-      <NoteModal/>
+      <div>
+        {sel?<NoteView/>:<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',color:T.dim,textAlign:'center'}}><Icon name="note" size={48}/><p style={{marginTop:8}}>Selecciona una nota</p></div>}
+      </div>
+      <NoteModal/><TemplatesModal/>
     </div>
   );
 };
@@ -1009,6 +1579,9 @@ const Notes = ({data,setData,isMobile,viewHint,onConsumeHint}) => {
 // ===================== INBOX =====================
 const Inbox = ({data,setData,isMobile}) => {
   const [text,setText]=useState('');
+  const [wizard,setWizard]=useState(null);
+  const [wizardStep,setWizardStep]=useState(0);
+
   const add=()=>{
     if(!text.trim())return;
     const updated=[{id:uid(),content:text.trim(),createdAt:today(),processed:false},...data.inbox];
@@ -1034,40 +1607,172 @@ const Inbox = ({data,setData,isMobile}) => {
     const updI=data.inbox.map(i=>i.id===item.id?{...i,processed:true}:i);
     setData(d=>({...d,objectives:updO,inbox:updI}));save('objectives',updO);save('inbox',updI);
   };
+
+  // Compute days since item was created
+  const daysAgo=(dateStr)=>{
+    if(!dateStr)return 0;
+    const diff=new Date(today())-new Date(dateStr);
+    return Math.max(0,Math.floor(diff/86400000));
+  };
+
+  // Psicke suggestion heuristic
+  const getSuggestion=(content)=>{
+    const c=content.toLowerCase();
+    if(c.includes('comprar')||c.includes('pagar')||c.includes('factura')||c.includes('gasto'))return{module:'Transacción',icon:'💰'};
+    if(c.includes('llamar')||c.includes('hablar')||c.includes('reunión')||c.includes('email'))return{module:'Tarea',icon:'✅'};
+    if(c.includes('aprender')||c.includes('curso')||c.includes('libro')||c.includes('leer'))return{module:'Aprendizaje',icon:'📚'};
+    if(c.includes('médico')||c.includes('ejercicio')||c.includes('correr')||c.includes('salud'))return{module:'Salud',icon:'💪'};
+    if(c.includes('proyecto')||c.includes('desarrollar')||c.includes('crear')||c.includes('construir'))return{module:'Proyecto',icon:'📁'};
+    if(c.includes('idea')||c.includes('pensar')||c.includes('quizás')||c.includes('podría'))return{module:'Idea',icon:'💡'};
+    return{module:'Nota',icon:'📝'};
+  };
+
+  // GTD wizard steps
+  const WIZARD_STEPS=[
+    {q:'¿Requiere acción de tu parte?',opts:['Sí, hay algo que hacer','No, es referencia o basura']},
+    {q:'¿Cuánto tiempo toma?',opts:['Menos de 2 minutos → hacerlo ya','Más de 2 min → agendarlo o delegarlo']},
+    {q:'¿A dónde va?',opts:['📝 Nota / Referencia','✅ Tarea','🎯 Objetivo','✓ Procesado / Descartar']},
+  ];
+  const stepColors=[T.accent,T.blue,T.purple];
+
+  const handleWizardOpt=(optIdx)=>{
+    if(wizardStep<WIZARD_STEPS.length-1){
+      setWizardStep(s=>s+1);
+    } else {
+      // Last step — take action
+      if(optIdx===0)convertToNote(wizard);
+      else if(optIdx===1)convertToTask(wizard);
+      else if(optIdx===2)convertToObjective(wizard);
+      else process(wizard.id);
+      setWizard(null);setWizardStep(0);
+    }
+  };
+
+  const pending=data.inbox.filter(i=>!i.processed);
+  const processed=data.inbox.filter(i=>i.processed);
+
   return (
     <div>
       <PageHeader title="Captura Rápida" subtitle="Vuelca ideas. Clasifícalas después." isMobile={isMobile}/>
+
+      {/* Quick capture input */}
       <div style={{display:'flex',gap:10,marginBottom:20}}>
         <Input value={text} onChange={setText} placeholder="¿Qué tienes en mente?" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&add()}/>
         <button onClick={add} style={{background:T.accent,border:'none',borderRadius:10,padding:'0 16px',cursor:'pointer',display:'flex',alignItems:'center',flexShrink:0}}><Icon name="plus" size={20} color="#000"/></button>
       </div>
-      {data.inbox.filter(i=>!i.processed).length>0&&(
+
+      {/* Pending items */}
+      {pending.length>0&&(
         <div style={{marginBottom:20}}>
-          <h3 style={{color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>Por procesar ({data.inbox.filter(i=>!i.processed).length})</h3>
-          {data.inbox.filter(i=>!i.processed).map(i=>(
-            <Card key={i.id} style={{marginBottom:10,borderLeft:`3px solid ${T.accent}`}}>
-              <p style={{color:T.text,margin:'0 0 10px',fontSize:14,lineHeight:1.5}}>{i.content}</p>
-              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                <Btn size="sm" variant="ghost" onClick={()=>convertToNote(i)}>📝 Nota</Btn>
-                <Btn size="sm" variant="ghost" onClick={()=>convertToTask(i)}>✅ Tarea</Btn>
-                <Btn size="sm" variant="ghost" onClick={()=>convertToObjective(i)}>🎯 Objetivo</Btn>
-                <Btn size="sm" variant="ghost" onClick={()=>process(i)}>✓ Listo</Btn>
-                <Btn size="sm" variant="danger" onClick={()=>del(i.id)}><Icon name="trash" size={11}/></Btn>
-              </div>
-            </Card>
-          ))}
+          <h3 style={{color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>
+            Por procesar ({pending.length})
+          </h3>
+          {pending.map(i=>{
+            const days=daysAgo(i.createdAt);
+            const isOld=days>=3;
+            const suggestion=getSuggestion(i.content);
+            return (
+              <Card key={i.id} style={{marginBottom:10,borderLeft:`3px solid ${isOld?T.orange:T.accent}`,position:'relative',overflow:'hidden'}}>
+                {/* Age badge */}
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                  <p style={{color:T.text,margin:0,fontSize:14,lineHeight:1.5,flex:1,paddingRight:8}}>{i.content}</p>
+                  <div style={{flexShrink:0,fontSize:10,fontWeight:700,
+                    color:isOld?T.orange:days===0?T.muted:T.dim,
+                    background:isOld?`${T.orange}15`:'transparent',
+                    border:isOld?`1px solid ${T.orange}30`:'none',
+                    padding:isOld?'2px 8px':'0',borderRadius:6,whiteSpace:'nowrap'}}>
+                    {days===0?'Hoy':days===1?'Ayer':`${days}d sin procesar`}
+                  </div>
+                </div>
+
+                {/* AI suggestion */}
+                <div style={{display:'inline-flex',alignItems:'center',gap:5,marginBottom:10,
+                  background:`${T.purple}10`,border:`1px solid ${T.purple}25`,
+                  borderRadius:7,padding:'4px 10px'}}>
+                  <span style={{fontSize:11}}>⚡</span>
+                  <span style={{fontSize:11,color:T.purple,fontWeight:600}}>Psicke sugiere:</span>
+                  <span style={{fontSize:11,color:T.muted}}>{suggestion.icon} {suggestion.module}</span>
+                </div>
+
+                {/* Action buttons */}
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  <button onClick={()=>{setWizard(i);setWizardStep(0);}}
+                    style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${T.accent}50`,
+                      background:`${T.accent}12`,color:T.accent,cursor:'pointer',
+                      fontSize:11,fontWeight:700,fontFamily:'inherit'}}>
+                    🧭 Procesar con GTD
+                  </button>
+                  <Btn size="sm" variant="ghost" onClick={()=>convertToNote(i)}>📝 Nota</Btn>
+                  <Btn size="sm" variant="ghost" onClick={()=>convertToTask(i)}>✅ Tarea</Btn>
+                  <Btn size="sm" variant="ghost" onClick={()=>convertToObjective(i)}>🎯 Objetivo</Btn>
+                  <Btn size="sm" variant="ghost" onClick={()=>process(i)}>✓ Listo</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>del(i.id)}><Icon name="trash" size={11}/></Btn>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
-      {data.inbox.filter(i=>i.processed).length>0&&(
+
+      {/* Processed */}
+      {processed.length>0&&(
         <div style={{opacity:0.5}}>
           <h3 style={{color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>Procesados</h3>
-          {data.inbox.filter(i=>i.processed).slice(0,5).map(i=>(
+          {processed.slice(0,5).map(i=>(
             <div key={i.id} style={{display:'flex',gap:10,alignItems:'center',padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
               <Icon name="check" size={14} color={T.green}/>
               <span style={{color:T.muted,fontSize:14,flex:1}}>{i.content}</span>
               <button onClick={()=>del(i.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',display:'flex',padding:4}}><Icon name="trash" size={14}/></button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* GTD WIZARD MODAL */}
+      {wizard&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.8)',zIndex:200,
+          display:'flex',alignItems:'center',justifyContent:'center',backdropFilter:'blur(6px)'}}>
+          <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:20,
+            padding:28,width:'100%',maxWidth:420,margin:'0 16px',boxShadow:'0 20px 60px rgba(0,0,0,0.6)'}}>
+
+            {/* Progress bar */}
+            <div style={{display:'flex',gap:5,marginBottom:24}}>
+              {WIZARD_STEPS.map((_,i)=>(
+                <div key={i} style={{flex:1,height:3,borderRadius:2,
+                  background:i<=wizardStep?stepColors[i]:T.border,transition:'background 0.3s'}}/>
+              ))}
+            </div>
+
+            <div style={{fontSize:10,color:T.muted,fontWeight:700,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>
+              Paso {wizardStep+1} de {WIZARD_STEPS.length}
+            </div>
+            <h3 style={{color:T.text,fontSize:17,fontWeight:700,margin:'0 0 10px'}}>{WIZARD_STEPS[wizardStep].q}</h3>
+
+            {/* Captured content */}
+            <div style={{background:T.surface2,borderRadius:10,padding:'10px 14px',marginBottom:16,
+              borderLeft:`3px solid ${stepColors[wizardStep]}`}}>
+              <p style={{color:T.muted,fontSize:13,margin:0,lineHeight:1.5}}>{wizard.content}</p>
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {WIZARD_STEPS[wizardStep].opts.map((opt,i)=>(
+                <button key={i} onClick={()=>handleWizardOpt(i)}
+                  style={{padding:'12px 16px',borderRadius:12,border:`1px solid ${T.border}`,
+                    background:T.surface2,color:T.text,cursor:'pointer',
+                    textAlign:'left',fontSize:13,fontFamily:'inherit',transition:'all 0.15s'}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=stepColors[wizardStep];e.currentTarget.style.background=`${stepColors[wizardStep]}12`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.surface2;}}>
+                  {opt}
+                </button>
+              ))}
+            </div>
+
+            <button onClick={()=>{setWizard(null);setWizardStep(0);}}
+              style={{marginTop:14,width:'100%',padding:'8px',background:'transparent',
+                border:'none',color:T.dim,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
+              Cancelar
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -1078,12 +1783,11 @@ const Inbox = ({data,setData,isMobile}) => {
 const HabitTracker = ({data,setData,isMobile}) => {
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({name:'',frequency:'daily',objectiveId:''});
-  const numDays=isMobile?5:7;
-  const nameColW=isMobile?'130px':'160px';
-  const days=Array.from({length:numDays},(_,i)=>{
-    const d=new Date();d.setDate(d.getDate()-(numDays-1)+i);
-    return {date:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,label:d.toLocaleDateString('es-ES',{weekday:'short'}),day:d.getDate()};
-  });
+  const [selectedHabit,setSelectedHabit]=useState(null);
+  const [freqFilter,setFreqFilter]=useState('all');
+  const [dragIdx,setDragIdx]=useState(null);
+  const todayStr=today();
+
   const toggle=(habitId,date)=>{
     const updated=data.habits.map(h=>{
       if(h.id!==habitId)return h;
@@ -1091,111 +1795,236 @@ const HabitTracker = ({data,setData,isMobile}) => {
       return {...h,completions:has?h.completions.filter(d=>d!==date):[...h.completions,date]};
     });
     setData(d=>({...d,habits:updated}));save('habits',updated);
+    if(selectedHabit?.id===habitId)setSelectedHabit(updated.find(h=>h.id===habitId));
   };
+
   const add=()=>{
     if(!form.name.trim())return;
     const updated=[...data.habits,{id:uid(),...form,completions:[]}];
     setData(d=>({...d,habits:updated}));save('habits',updated);
     setModal(false);setForm({name:'',frequency:'daily',objectiveId:''});
   };
-  const del=(id)=>{const u=data.habits.filter(h=>h.id!==id);setData(d=>({...d,habits:u}));save('habits',u);};
-  const todayStr=today();
+  const del=(id)=>{
+    const u=data.habits.filter(h=>h.id!==id);
+    setData(d=>({...d,habits:u}));save('habits',u);
+    if(selectedHabit?.id===id)setSelectedHabit(null);
+  };
 
-  // Compute stats
-  const streaks=data.habits.map(h=>{
+  const computeStreak=(h)=>{
     let s=0,d=new Date();
-    const ld=()=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    while(h.completions.includes(ld())){s++;d.setDate(d.getDate()-1);}
-    return {id:h.id,name:h.name,streak:s};
-  });
-  const todayDone=data.habits.filter(h=>h.completions.includes(todayStr)).length;
-  const todayTotal=data.habits.length;
-  const todayPct=todayTotal?Math.round(todayDone/todayTotal*100):0;
-  const bestStreak=streaks.reduce((max,s)=>s.streak>max?s.streak:max,0);
+    const fd=()=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    while(h.completions.includes(fd())){s++;d.setDate(d.getDate()-1);}
+    return s;
+  };
+  const computeMaxStreak=(h)=>{
+    if(!h.completions.length)return 0;
+    const sorted=[...h.completions].sort();
+    let maxS=1,cur=1;
+    for(let i=1;i<sorted.length;i++){
+      const diff=(new Date(sorted[i])-new Date(sorted[i-1]))/86400000;
+      if(diff===1){cur++;maxS=Math.max(maxS,cur);}else cur=1;
+    }
+    return maxS;
+  };
+
+  const last28=Array.from({length:28},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
   const weekDates=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
+
+  const dailyHabits=data.habits.filter(h=>!h.frequency||h.frequency==='daily');
+  const todayDone=dailyHabits.filter(h=>h.completions.includes(todayStr)).length;
+  const todayTotal=dailyHabits.length;
+  const todayPct=todayTotal?Math.round(todayDone/todayTotal*100):0;
   const weekTotal=data.habits.reduce((s,h)=>s+weekDates.filter(d=>h.completions.includes(d)).length,0);
-  const weekPossible=data.habits.length*7;
+  const weekPossible=dailyHabits.length*7;
   const weekPct=weekPossible?Math.round(weekTotal/weekPossible*100):0;
+  const allStreaks=data.habits.map(h=>({id:h.id,streak:computeStreak(h),maxStreak:computeMaxStreak(h)}));
+  const bestStreak=allStreaks.reduce((max,s)=>s.streak>max?s.streak:max,0);
+
+  const HABIT_COLORS=['#4da6ff','#00c896','#ff8c42','#a78bfa','#ff5069','#ffd166','#00e0a8','#ff6b8a'];
+  const habitColor=(h,idx)=>h.color||(HABIT_COLORS[idx%HABIT_COLORS.length]);
+  const filteredHabits=freqFilter==='all'?data.habits:data.habits.filter(h=>(h.frequency||'daily')===freqFilter);
+
+  const onDragStart=(i)=>setDragIdx(i);
+  const onDrop=(targetIdx)=>{
+    if(dragIdx===null||dragIdx===targetIdx)return;
+    const arr=[...data.habits];
+    const [moved]=arr.splice(dragIdx,1);
+    arr.splice(targetIdx,0,moved);
+    setData(d=>({...d,habits:arr}));save('habits',arr);
+    setDragIdx(null);
+  };
 
   return (
     <div>
       <PageHeader title="Habit Tracker" subtitle="Construye rachas diarias 🔥" isMobile={isMobile}
         action={<Btn onClick={()=>setModal(true)} size="sm"><Icon name="plus" size={14}/>Nuevo</Btn>}/>
 
-      {/* Stats summary */}
+      {/* ── Stats ── */}
       {data.habits.length>0&&(
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:20}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
           <Card style={{textAlign:'center',padding:isMobile?10:14}}>
-            <div style={{fontSize:10,color:T.muted,marginBottom:2}}>Hoy</div>
+            <div style={{fontSize:10,color:T.muted,marginBottom:4}}>Hoy</div>
             <div style={{fontSize:isMobile?20:24,fontWeight:700,color:todayPct===100?T.green:todayPct>50?T.accent:T.text}}>{todayDone}/{todayTotal}</div>
-            <div style={{height:3,background:T.border,borderRadius:2,marginTop:4}}>
+            <div style={{height:3,background:T.border,borderRadius:2,marginTop:6}}>
               <div style={{height:'100%',width:`${todayPct}%`,background:todayPct===100?T.green:T.accent,borderRadius:2,transition:'width 0.3s'}}/>
             </div>
           </Card>
           <Card style={{textAlign:'center',padding:isMobile?10:14}}>
-            <div style={{fontSize:10,color:T.muted,marginBottom:2}}>Mejor racha</div>
+            <div style={{fontSize:10,color:T.muted,marginBottom:4}}>Mejor racha</div>
             <div style={{fontSize:isMobile?20:24,fontWeight:700,color:bestStreak>=7?T.green:bestStreak>=3?T.accent:T.text}}>🔥 {bestStreak}d</div>
-            <div style={{fontSize:10,color:T.dim,marginTop:4}}>{streaks.find(s=>s.streak===bestStreak&&s.streak>0)?.name||''}</div>
           </Card>
           <Card style={{textAlign:'center',padding:isMobile?10:14}}>
-            <div style={{fontSize:10,color:T.muted,marginBottom:2}}>Semana</div>
+            <div style={{fontSize:10,color:T.muted,marginBottom:4}}>Esta semana</div>
             <div style={{fontSize:isMobile?20:24,fontWeight:700,color:weekPct>=80?T.green:weekPct>=50?T.accent:T.text}}>{weekPct}%</div>
-            <div style={{height:3,background:T.border,borderRadius:2,marginTop:4}}>
+            <div style={{height:3,background:T.border,borderRadius:2,marginTop:6}}>
               <div style={{height:'100%',width:`${weekPct}%`,background:weekPct>=80?T.green:T.accent,borderRadius:2,transition:'width 0.3s'}}/>
             </div>
           </Card>
         </div>
       )}
 
-      {/* Habit grid */}
-      <div style={{background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,overflow:'hidden'}}>
-        <div style={{display:'grid',gridTemplateColumns:`${nameColW} repeat(${numDays},1fr)`,borderBottom:`1px solid ${T.border}`}}>
-          <div style={{padding:'10px 14px',color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>Hábito</div>
-          {days.map(d=>(
-            <div key={d.date} style={{padding:'8px 4px',textAlign:'center',borderLeft:`1px solid ${T.border}`}}>
-              <div style={{color:d.date===todayStr?T.accent:T.dim,fontSize:10,fontWeight:600,textTransform:'uppercase'}}>{d.label}</div>
-              <div style={{color:d.date===todayStr?T.accent:T.muted,fontSize:13,fontWeight:700}}>{d.day}</div>
-            </div>
+      {/* ── Frequency filter ── */}
+      {data.habits.length>0&&(
+        <div style={{display:'flex',gap:4,background:T.surface2,borderRadius:10,padding:3,marginBottom:14,width:'fit-content'}}>
+          {['all','daily','weekly'].map(f=>(
+            <button key={f} onClick={()=>setFreqFilter(f)}
+              style={{padding:'5px 14px',borderRadius:7,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit',
+                background:freqFilter===f?T.accent:'transparent',color:freqFilter===f?'#000':T.muted,transition:'all 0.15s'}}>
+              {f==='all'?'Todos':f==='daily'?'Diarios':'Semanales'}
+            </button>
           ))}
         </div>
-        {data.habits.map(h=>{
-          const streak=streaks.find(s=>s.id===h.id)?.streak||0;
-          const weekDone=weekDates.filter(d=>h.completions.includes(d)).length;
+      )}
+
+      {/* ── Habit cards ── */}
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {filteredHabits.map((h,idx)=>{
+          const realIdx=data.habits.indexOf(h);
+          const color=habitColor(h,realIdx);
+          const done=h.completions.includes(todayStr);
+          const streak=allStreaks.find(s=>s.id===h.id)?.streak||0;
+          const maxStreak=allStreaks.find(s=>s.id===h.id)?.maxStreak||0;
+          const isSelected=selectedHabit?.id===h.id;
+          const pct28=Math.round(last28.filter(d=>h.completions.includes(d)).length/28*100);
+          const days28=last28.filter(d=>h.completions.includes(d)).length;
           return (
-            <div key={h.id} style={{display:'grid',gridTemplateColumns:`${nameColW} repeat(${numDays},1fr)`,borderBottom:`1px solid ${T.border}`}}>
-              <div style={{padding:'12px 10px 12px 14px',display:'flex',alignItems:'center',gap:6}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:T.text,fontSize:12,fontWeight:500,lineHeight:1.3,wordBreak:'break-word'}}>{h.name}</div>
-                  <div style={{display:'flex',gap:6,marginTop:2,flexWrap:'wrap'}}>
-                    {streak>0&&<span style={{color:T.accent,fontSize:10}}>🔥 {streak}d</span>}
-                    <span style={{color:weekDone>=5?T.green:T.dim,fontSize:10}}>{weekDone}/7 sem</span>
-                    {h.objectiveId&&(()=>{const o=data.objectives.find(x=>x.id===h.objectiveId);return o?<span style={{color:T.purple,fontSize:10}}>🎯 {o.title.slice(0,20)}{o.title.length>20?'…':''}</span>:null;})()}
+            <div key={h.id}>
+              {/* ── Card row ── */}
+              <div
+                draggable
+                onDragStart={()=>onDragStart(realIdx)}
+                onDragOver={e=>e.preventDefault()}
+                onDrop={()=>onDrop(realIdx)}
+                style={{
+                  background:T.surface,
+                  border:`1.5px solid ${isSelected?color+'60':T.border}`,
+                  borderLeft:`3px solid ${color}`,
+                  borderRadius:12,
+                  padding:'12px 14px',
+                  display:'flex',
+                  alignItems:'center',
+                  gap:10,
+                  transition:'all 0.15s',
+                  opacity:dragIdx===realIdx?0.45:1,
+                  cursor:'default',
+                }}>
+
+                {/* Drag handle */}
+                <div style={{color:T.dim,fontSize:18,cursor:'grab',flexShrink:0,userSelect:'none',lineHeight:1}}>⠿</div>
+
+                {/* Circular toggle */}
+                <button
+                  onClick={e=>{e.stopPropagation();toggle(h.id,todayStr);}}
+                  style={{
+                    width:30,height:30,borderRadius:'50%',flexShrink:0,
+                    border:`2.5px solid ${done?color:T.border}`,
+                    background:done?color:'transparent',
+                    cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+                    transition:'all 0.2s',
+                  }}>
+                  {done&&<Icon name="check" size={13} color="#000"/>}
+                </button>
+
+                {/* Name + frequency */}
+                <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>setSelectedHabit(isSelected?null:h)}>
+                  <div style={{fontSize:14,fontWeight:500,color:done?T.muted:T.text,
+                    textDecoration:done?'line-through':'none',lineHeight:1.3}}>{h.name}</div>
+                  <div style={{fontSize:10,color:T.dim,marginTop:2}}>
+                    {(h.frequency||'daily')==='daily'?'Diario':'Semanal'}
+                    {h.objectiveId&&(()=>{const o=data.objectives?.find(x=>x.id===h.objectiveId);return o?<span style={{color:T.purple}}> · 🎯 {o.title.slice(0,20)}</span>:null;})()}
                   </div>
                 </div>
-                <button onClick={()=>del(h.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2,display:'flex',flexShrink:0}}><Icon name="trash" size={12}/></button>
-              </div>
-              {days.map(d=>{
-                const done=h.completions.includes(d.date);
-                return (
-                  <div key={d.date} style={{display:'flex',alignItems:'center',justifyContent:'center',borderLeft:`1px solid ${T.border}`}}>
-                    <button onClick={()=>toggle(h.id,d.date)} style={{width:28,height:28,borderRadius:7,border:`2px solid ${done?T.green:T.border}`,background:done?T.green:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}>
-                      {done&&<Icon name="check" size={12} color="#000"/>}
-                    </button>
+
+                {/* Streak badge */}
+                <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,flexShrink:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:3,background:`${color}18`,borderRadius:7,padding:'3px 9px'}}>
+                    <span style={{fontSize:11}}>🔥</span>
+                    <span style={{fontSize:12,fontWeight:700,color}}>{streak}</span>
                   </div>
-                );
-              })}
+                  <span style={{fontSize:9,color:T.dim}}>máx {maxStreak}</span>
+                </div>
+
+                {/* Delete */}
+                <button
+                  onClick={e=>{e.stopPropagation();del(h.id);}}
+                  style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:'3px',display:'flex',flexShrink:0}}>
+                  <Icon name="trash" size={12}/>
+                </button>
+              </div>
+
+              {/* ── Inline detail panel ── */}
+              {isSelected&&(
+                <div style={{
+                  background:`${color}06`,
+                  border:`1.5px solid ${color}30`,
+                  borderTop:'none',
+                  borderRadius:'0 0 12px 12px',
+                  padding:'14px 16px',
+                }}>
+                  {/* Header */}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                    <span style={{fontWeight:700,fontSize:13,color:T.text}}>{h.name} — últimas 5 semanas</span>
+                    <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                      <div style={{textAlign:'center'}}>
+                        <div style={{fontSize:16,fontWeight:800,color}}>{days28}/28</div>
+                        <div style={{fontSize:9,color:T.muted}}>últimos días</div>
+                      </div>
+                      <Ring pct={pct28} color={color} size={46} stroke={4}/>
+                    </div>
+                  </div>
+
+                  {/* Heatmap */}
+                  <HabitHeatmap completions={h.completions} color={color}/>
+
+                  {/* Stat pills */}
+                  <div style={{display:'flex',gap:8,marginTop:12}}>
+                    {[
+                      {v:`🔥 ${streak}`,c:color,   l:'Racha actual'},
+                      {v:`⚡ ${maxStreak}`,c:T.orange,l:'Racha máxima'},
+                      {v:h.completions.length,c:T.text,l:'Total días'},
+                    ].map(s=>(
+                      <div key={s.l} style={{flex:1,background:T.surface2,borderRadius:9,padding:'9px 10px',textAlign:'center'}}>
+                        <div style={{fontSize:15,fontWeight:800,color:s.c,lineHeight:1}}>{s.v}</div>
+                        <div style={{fontSize:9,color:T.muted,marginTop:3}}>{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
-        {!data.habits.length&&(
-          <div style={{padding:'40px 20px',textAlign:'center',color:T.dim}}>
+
+        {!filteredHabits.length&&(
+          <div style={{padding:'40px 20px',textAlign:'center',color:T.dim,background:T.surface,borderRadius:12,border:`1px solid ${T.border}`}}>
             <div style={{fontSize:40,marginBottom:8}}>🔥</div>
-            <p style={{margin:'0 0 4px',fontSize:14}}>Sin hábitos aún</p>
-            <p style={{margin:'0 0 12px',fontSize:12,color:T.muted}}>Los hábitos se construyen un día a la vez. Empiece con uno pequeño.</p>
+            <p style={{margin:'0 0 4px',fontSize:14}}>{data.habits.length?'Sin hábitos en este filtro':'Sin hábitos aún'}</p>
+            <p style={{margin:'0 0 12px',fontSize:12,color:T.muted}}>Los hábitos se construyen un día a la vez.</p>
             <Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={12}/>Crear primer hábito</Btn>
           </div>
         )}
       </div>
+
       {modal&&(
         <Modal title="Nuevo hábito" onClose={()=>setModal(false)}>
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -1215,6 +2044,8 @@ const HabitTracker = ({data,setData,isMobile}) => {
     </div>
   );
 };
+
+
 
 // ===================== GEMINI CONFIG =====================
 const GEMINI_MODEL='gemini-2.5-flash-lite';
@@ -3715,414 +4546,301 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
 
 // ===================== DESARROLLO PERSONAL =====================
 const DesarrolloPersonal = ({data,setData,isMobile,onBack}) => {
-  const [tab,setTab]             = useState('libros');
-  const [modalBook,setModalBook] = useState(false);
-  const [modalLearn,setModalLearn] = useState(false);
-  const [modalRetro,setModalRetro] = useState(false);
-  const [modalIdea,setModalIdea]   = useState(false);
-  const [selBook,setSelBook]       = useState(null);
-  const [editingBook,setEditingBook] = useState(false);
-  const [bookFilter,setBookFilter]   = useState('all');
-  const [bookForm,setBookForm]       = useState({title:'',author:'',status:'want',rating:0,review:'',genre:'',pages:''});
-  const [learnForm,setLearnForm]     = useState({name:'',platform:'',category:'',progress:0,hoursTotal:0,hoursSpent:0,status:'active',notes:''});
-  const [retroForm,setRetroForm]     = useState({period:'semanal',wentWell:'',improve:'',learned:'',date:today()});
-  const [ideaForm,setIdeaForm]       = useState({content:'',tag:'',date:today()});
+  const [tab,setTab]=useState('learning');
+  const [pomActive,setPomActive]=useState(false);
+  const [pomSeconds,setPomSeconds]=useState(25*60);
+  const [pomMode,setPomMode]=useState('focus');
+  const [pomCycles,setPomCycles]=useState(0);
+  const [studyMin,setStudyMin]=useState(0);
+  const [selCourse,setSelCourse]=useState(null);
+  const [ideaFilter,setIdeaFilter]=useState('all');
+  const timerRef=useRef(null);
 
-  const books    = data.books||[];
-  const learnings= data.learnings||[];
-  const retros   = data.retros||[];
-  const ideas    = data.ideas||[];
+  const [modal,setModal]=useState(false);
+  const [ideaModal,setIdeaModal]=useState(false);
+  const [form,setForm]=useState({type:'learning',title:'',platform:'',category:'',hoursTotal:10,progress:0});
+  const [ideaForm,setIdeaForm]=useState({content:'',tag:'💡 Idea'});
 
-  // ── summary ──
-  const BOOK_STATUSES=[{id:'want',label:'Por leer',color:T.blue,emoji:'📚'},{id:'reading',label:'Leyendo',color:T.accent,emoji:'📖'},{id:'done',label:'Leído',color:T.green,emoji:'✅'},{id:'abandoned',label:'Abandonado',color:T.dim,emoji:'❌'}];
-  const activelearnings = learnings.filter(l=>l.status==='active');
-  const hoursThisMonth  = learnings.reduce((s,l)=>s+(Number(l.hoursSpent)||0),0);
-  const lastRetro       = [...retros].sort((a,b)=>b.date.localeCompare(a.date))[0];
-  const lastRetroDays   = lastRetro ? Math.floor((new Date()-new Date(lastRetro.date))/(1000*60*60*24)) : null;
+  const learnings=(data.learnings||[]);
+  const ideas=(data.ideas||[]);
 
-  // ── book actions ──
-  const saveBook=(isEdit=false)=>{
-    if(!bookForm.title.trim()) return;
-    const b={...bookForm,id:isEdit?selBook.id:uid(),pages:Number(bookForm.pages)||0,createdAt:isEdit?(selBook.createdAt||today()):today()};
-    const upd=isEdit?books.map(x=>x.id===b.id?b:x):[b,...books];
-    setData(d=>({...d,books:upd})); save('books',upd);
-    setModalBook(false); setEditingBook(false); setSelBook(b);
-    setBookForm({title:'',author:'',status:'want',rating:0,review:'',genre:'',pages:''});
+  const saveLearning=()=>{
+    if(!form.title.trim())return;
+    const upd=[...learnings,{id:uid(),...form,hoursSpent:0,streak:0,createdAt:today()}];
+    setData(d=>({...d,learnings:upd}));save('learnings',upd);
+    setModal(false);setForm({type:'learning',title:'',platform:'',category:'',hoursTotal:10,progress:0});
   };
-  const delBook=(id)=>{
-    if(!window.confirm('¿Eliminar este libro?')) return;
-    const upd=books.filter(b=>b.id!==id); setData(d=>({...d,books:upd})); save('books',upd);
-    if(selBook?.id===id) setSelBook(null);
-  };
-  const openEditBook=(b)=>{ setBookForm({title:b.title,author:b.author||'',status:b.status,rating:b.rating||0,review:b.review||'',genre:b.genre||'',pages:b.pages||''}); setEditingBook(true); setSelBook(b); setModalBook(true); };
-
-  // ── learning actions ──
-  const LEARN_CATS=['Programación','Idiomas','Diseño','Negocios','Ciencia','Arte','Música','Deporte','Filosofía','Otro'];
-  const saveLearn=()=>{
-    if(!learnForm.name.trim()) return;
-    const l={id:uid(),...learnForm,progress:Number(learnForm.progress)||0,hoursTotal:Number(learnForm.hoursTotal)||0,hoursSpent:Number(learnForm.hoursSpent)||0,createdAt:today()};
-    const upd=[l,...learnings]; setData(d=>({...d,learnings:upd})); save('learnings',upd);
-    setModalLearn(false); setLearnForm({name:'',platform:'',category:'',progress:0,hoursTotal:0,hoursSpent:0,status:'active',notes:''});
-  };
-  const updateProgress=(id,delta)=>{
-    const upd=learnings.map(l=>l.id===id?{...l,progress:Math.min(100,Math.max(0,(l.progress||0)+delta))}:l);
-    setData(d=>({...d,learnings:upd})); save('learnings',upd);
-  };
-  const completeLearn=(id)=>{
-    const upd=learnings.map(l=>l.id===id?{...l,status:'done',progress:100}:l);
-    setData(d=>({...d,learnings:upd})); save('learnings',upd);
-  };
-  const delLearn=(id)=>{ const upd=learnings.filter(l=>l.id!==id); setData(d=>({...d,learnings:upd})); save('learnings',upd); };
-
-  // ── retro actions ──
-  const saveRetro=()=>{
-    if(!retroForm.wentWell.trim()&&!retroForm.learned.trim()) return;
-    const r={id:uid(),...retroForm,createdAt:today()};
-    const upd=[r,...retros]; setData(d=>({...d,retros:upd})); save('retros',upd);
-    setModalRetro(false); setRetroForm({period:'semanal',wentWell:'',improve:'',learned:'',date:today()});
-  };
-  const delRetro=(id)=>{ const upd=retros.filter(r=>r.id!==id); setData(d=>({...d,retros:upd})); save('retros',upd); };
-
-  // ── idea actions ──
-  const IDEA_TAGS=['Insight','Cita','Aprendizaje','Pregunta','Idea','Reflexión','Otro'];
   const saveIdea=()=>{
-    if(!ideaForm.content.trim()) return;
-    const i={id:uid(),...ideaForm,createdAt:today()};
-    const upd=[i,...ideas]; setData(d=>({...d,ideas:upd})); save('ideas',upd);
-    setModalIdea(false); setIdeaForm({content:'',tag:'',date:today()});
+    if(!ideaForm.content.trim())return;
+    const upd=[{id:uid(),...ideaForm,createdAt:today()},...ideas];
+    setData(d=>({...d,ideas:upd}));save('ideas',upd);
+    setIdeaModal(false);setIdeaForm({content:'',tag:'💡 Idea'});
   };
-  const delIdea=(id)=>{ const upd=ideas.filter(i=>i.id!==id); setData(d=>({...d,ideas:upd})); save('ideas',upd); };
+  const delLearning=(id)=>{const u=learnings.filter(l=>l.id!==id);setData(d=>({...d,learnings:u}));save('learnings',u);};
+  const delIdea=(id)=>{const u=ideas.filter(i=>i.id!==id);setData(d=>({...d,ideas:u}));save('ideas',u);};
+  const updateProgress=(id,pct)=>{const u=learnings.map(l=>l.id!==id?l:{...l,progress:Math.min(100,Math.max(0,pct))});setData(d=>({...d,learnings:u}));save('learnings',u);};
 
-  const StarRating=({val,onChange})=>(
-    <div style={{display:'flex',gap:4}}>
-      {[1,2,3,4,5].map(i=><button key={i} onClick={()=>onChange&&onChange(i===val?0:i)}
-        style={{background:'none',border:'none',cursor:onChange?'pointer':'default',padding:2,color:i<=val?T.accent:T.border}}>
-        <Icon name={i<=val?'star':'starEmpty'} size={18} color={i<=val?T.accent:T.border}/>
-      </button>)}
-    </div>
-  );
+  // Pomodoro timer
+  useEffect(()=>{
+    if(pomActive){
+      timerRef.current=setInterval(()=>{
+        setPomSeconds(s=>{
+          if(s<=1){
+            clearInterval(timerRef.current);setPomActive(false);
+            if(pomMode==='focus'){setPomCycles(c=>c+1);setStudyMin(m=>m+25);setPomMode('break');return 5*60;}
+            else{setPomMode('focus');return 25*60;}
+          }
+          return s-1;
+        });
+      },1000);
+    } else clearInterval(timerRef.current);
+    return()=>clearInterval(timerRef.current);
+  },[pomActive,pomMode]);
 
-  const fmtDate=(d)=>{ try{ return new Date(d+'T12:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}); }catch{return d||'—';} };
+  const fmtTime=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  const pomTotalSecs=pomMode==='focus'?25*60:5*60;
+  const pomPct=(1-pomSeconds/pomTotalSecs)*100;
+
+  const IDEA_TAGS=['💡 Idea','✍️ Escritura','🎓 Educación','📋 Plantilla','🚀 Proyecto','🔧 Herramienta'];
+  const LEARNING_COLORS=[T.blue,T.purple,T.accent,T.orange,T.red,T.yellow];
+  const lColor=(l,i)=>l.color||(LEARNING_COLORS[i%LEARNING_COLORS.length]);
+  const maxHours=Math.max(...learnings.map(l=>l.hoursSpent||0),1);
+
+  const uniqueTags=[...new Set(ideas.map(i=>i.tag))];
+  const filteredIdeas=ideaFilter==='all'?ideas:ideas.filter(i=>i.tag===ideaFilter);
+
+  // Retrospectives
+  const [retros,setRetros]=useState(data.retros||[]);
+  const [retroForm,setRetroForm]=useState({bien:'',mejorar:'',aprendi:'',intencion:''});
+  const saveRetro=()=>{
+    const upd=[{id:uid(),...retroForm,date:today()},...retros];
+    setRetros(upd);setData(d=>({...d,retros:upd}));save('retros',upd);
+    setRetroForm({bien:'',mejorar:'',aprendi:'',intencion:''});
+  };
 
   return (
     <div>
-      <PageHeader isMobile={isMobile} title="🧠 Desarrollo Personal" onBack={onBack}
-        subtitle="Libros, aprendizajes, retrospectivas e ideas"
-        action={
-          <div style={{display:'flex',gap:8}}>
-            {tab==='libros'       &&<Btn size="sm" onClick={()=>{setEditingBook(false);setBookForm({title:'',author:'',status:'want',rating:0,review:'',genre:'',pages:''});setModalBook(true);}}><Icon name="plus" size={14}/>Libro</Btn>}
-            {tab==='aprendizajes' &&<Btn size="sm" onClick={()=>setModalLearn(true)}><Icon name="plus" size={14}/>Aprendizaje</Btn>}
-            {tab==='retrospectivas'&&<Btn size="sm" onClick={()=>setModalRetro(true)}><Icon name="plus" size={14}/>Retro</Btn>}
-            {tab==='ideas'        &&<Btn size="sm" onClick={()=>setModalIdea(true)}><Icon name="plus" size={14}/>Idea</Btn>}
-          </div>
-        }
-      />
+      <PageHeader title="Desarrollo Personal" subtitle="Aprende, reflexiona, crece 🧠" isMobile={isMobile} onBack={onBack}/>
 
-      {/* ── Summary cards ── */}
-      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:10,marginBottom:20}}>
-        {[
-          {label:'Libros leídos',   val:books.filter(b=>b.status==='done').length,  color:T.green},
-          {label:'Aprendizajes activos', val:activelearnings.length,               color:T.accent},
-          {label:'Horas invertidas',val:hoursThisMonth,                            color:T.blue},
-          {label:'Última retro',    val:lastRetroDays===null?'—':`hace ${lastRetroDays}d`, color:lastRetroDays===null||lastRetroDays>14?T.orange:T.green},
-        ].map(s=>(
-          <Card key={s.label} style={{textAlign:'center',padding:14}}>
-            <div style={{fontSize:11,color:T.muted,marginBottom:4}}>{s.label}</div>
-            <div style={{fontSize:isMobile?18:22,fontWeight:700,color:s.color}}>{s.val}</div>
-          </Card>
-        ))}
-      </div>
-
-      {/* ── Tabs ── */}
-      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
-        {[{id:'libros',label:'📚 Libros'},{id:'aprendizajes',label:'📖 Aprendizajes'},{id:'retrospectivas',label:'🔄 Retrospectivas'},{id:'ideas',label:'💡 Ideas'}].map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:'7px 16px',borderRadius:10,border:`1px solid ${tab===t.id?T.accent:T.border}`,background:tab===t.id?`${T.accent}18`:'transparent',color:tab===t.id?T.accent:T.muted,cursor:'pointer',fontSize:13,fontWeight:tab===t.id?600:400,fontFamily:'inherit'}}>
-            {t.label}
+      {/* Tab nav */}
+      <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
+        {[['learning','📚 Aprendizajes'],['pomodoro','⏱ Pomodoro'],['ideas','💡 Ideas'],['retro','📋 Retro']].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)}
+            style={{padding:'6px 14px',borderRadius:10,border:`1px solid ${tab===id?T.purple:T.border}`,background:tab===id?`${T.purple}18`:'transparent',color:tab===id?T.purple:T.muted,cursor:'pointer',fontSize:12,fontWeight:tab===id?700:400,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+            {label}
           </button>
         ))}
       </div>
 
-      {/* ══════════ LIBROS ══════════ */}
-      {tab==='libros'&&(
+      {/* ── LEARNING ── */}
+      {tab==='learning'&&(
         <div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:16}}>
-            {BOOK_STATUSES.map(s=>{
-              const cnt=books.filter(b=>b.status===s.id).length;
-              return <Card key={s.id} onClick={()=>setBookFilter(bookFilter===s.id?'all':s.id)}
-                style={{textAlign:'center',padding:10,border:`1px solid ${bookFilter===s.id?s.color:T.border}`,cursor:'pointer'}}>
-                <div style={{fontSize:18}}>{s.emoji}</div>
-                <div style={{fontSize:20,fontWeight:700,color:s.color}}>{cnt}</div>
-                <div style={{fontSize:10,color:T.muted,marginTop:1}}>{s.label}</div>
-              </Card>;
-            })}
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
+            <Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={12}/>Agregar</Btn>
           </div>
-
-          {selBook&&(
-            <Card style={{marginBottom:16,borderLeft:`3px solid ${T.accent}`}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-                <div style={{flex:1}}>
-                  <div style={{color:T.text,fontWeight:700,fontSize:16}}>{selBook.title}</div>
-                  {selBook.author&&<div style={{color:T.muted,fontSize:13,marginTop:2}}>por {selBook.author}</div>}
-                </div>
-                <div style={{display:'flex',gap:6}}>
-                  <button onClick={()=>openEditBook(selBook)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,padding:'4px 10px',cursor:'pointer',color:T.muted,fontSize:12,fontFamily:'inherit'}}>✏️</button>
-                  <button onClick={()=>delBook(selBook.id)} style={{background:'none',border:'none',color:T.red,cursor:'pointer',display:'flex',padding:4}}><Icon name="trash" size={15}/></button>
-                </div>
+          {/* Hours bar chart */}
+          {learnings.length>1&&(
+            <Card style={{marginBottom:14,padding:16}}>
+              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:12}}>Horas dedicadas por curso</div>
+              <div style={{display:'flex',gap:6,alignItems:'flex-end',height:64}}>
+                {learnings.map((l,i)=>{
+                  const h=Math.max(((l.hoursSpent||0)/maxHours)*54,l.hoursSpent>0?4:0);
+                  const color=lColor(l,i);
+                  const isSel=selCourse===l.id;
+                  return (
+                    <div key={l.id} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3,cursor:'pointer'}}
+                      onClick={()=>setSelCourse(isSel?null:l.id)}>
+                      <div style={{width:'100%',height:h,background:isSel?color:`${color}55`,borderRadius:'4px 4px 0 0',transition:'all 0.3s'}}
+                        title={`${l.title}: ${l.hoursSpent||0}h`}/>
+                      <span style={{fontSize:8,color:isSel?color:T.dim,textAlign:'center',lineHeight:1.2}}>{l.hoursSpent||0}h</span>
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>
-                {(()=>{const s=BOOK_STATUSES.find(x=>x.id===selBook.status);return s?<Tag text={`${s.emoji} ${s.label}`} color={s.color}/>:null;})()}
-                {selBook.genre&&<Tag text={selBook.genre}/>}
-                {selBook.pages>0&&<span style={{color:T.muted,fontSize:12}}>{selBook.pages} págs</span>}
-              </div>
-              {selBook.rating>0&&<div style={{marginBottom:8}}><StarRating val={selBook.rating}/></div>}
-              {selBook.review&&<p style={{color:T.text,fontSize:14,lineHeight:1.7,margin:0,fontStyle:'italic'}}>"{selBook.review}"</p>}
             </Card>
           )}
+          {learnings.map((l,i)=>{
+            const color=lColor(l,i);
+            const isSel=selCourse===l.id;
+            return (
+              <Card key={l.id} style={{marginBottom:10,border:`1.5px solid ${isSel?color:T.border}`}} onClick={()=>setSelCourse(isSel?null:l.id)}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:14,color:T.text}}>{l.title}</div>
+                    <div style={{fontSize:11,color:T.muted,marginTop:2}}>{l.platform&&`${l.platform} · `}{l.category}</div>
+                  </div>
+                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                    {(l.streak||0)>0&&<span style={{fontSize:11,color:T.orange,fontWeight:700}}>🔥{l.streak}d</span>}
+                    <span style={{fontSize:14,fontWeight:800,color,fontFamily:'monospace'}}>{l.progress||0}%</span>
+                    <button onClick={e=>{e.stopPropagation();delLearning(l.id);}} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2}}><Icon name="trash" size={12}/></button>
+                  </div>
+                </div>
+                <div style={{height:5,background:T.border,borderRadius:3,overflow:'hidden',marginBottom:4}}>
+                  <div style={{height:'100%',width:`${l.progress||0}%`,background:color,borderRadius:3,transition:'width 0.5s'}}/>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:T.muted}}>
+                  <span>{l.hoursSpent||0}h de {l.hoursTotal||0}h</span>
+                  <span>{(l.hoursTotal||0)-(l.hoursSpent||0)}h restantes</span>
+                </div>
+                {isSel&&(
+                  <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${T.border}`,display:'flex',gap:8,alignItems:'center'}}>
+                    <span style={{fontSize:12,color:T.muted}}>Progreso:</span>
+                    <input type="range" min={0} max={100} value={l.progress||0}
+                      onChange={e=>{e.stopPropagation();updateProgress(l.id,Number(e.target.value));}}
+                      onClick={e=>e.stopPropagation()}
+                      style={{flex:1,accentColor:color}}/>
+                    <span style={{fontSize:12,fontWeight:700,color}}>{l.progress||0}%</span>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+          {!learnings.length&&<div style={{textAlign:'center',padding:'30px 0',color:T.dim}}><p style={{fontSize:14}}>Sin cursos aún</p><Btn size="sm" onClick={()=>setModal(true)} style={{marginTop:8}}><Icon name="plus" size={12}/>Agregar curso</Btn></div>}
+          {modal&&<Modal title="Nuevo aprendizaje" onClose={()=>setModal(false)}>
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+              <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Nombre del curso/libro/skill"/>
+              <Input value={form.platform} onChange={v=>setForm(f=>({...f,platform:v}))} placeholder="Plataforma (Udemy, Coursera...)"/>
+              <Input value={form.category} onChange={v=>setForm(f=>({...f,category:v}))} placeholder="Categoría (Desarrollo, Diseño...)"/>
+              <div style={{display:'flex',gap:8}}>
+                <div style={{flex:1}}><label style={{fontSize:11,color:T.muted}}>Horas totales</label><Input type="number" value={form.hoursTotal} onChange={v=>setForm(f=>({...f,hoursTotal:Number(v)}))} placeholder="20"/></div>
+                <div style={{flex:1}}><label style={{fontSize:11,color:T.muted}}>Progreso inicial %</label><Input type="number" value={form.progress} onChange={v=>setForm(f=>({...f,progress:Number(v)}))} placeholder="0"/></div>
+              </div>
+              <Btn onClick={saveLearning} style={{width:'100%',justifyContent:'center'}}>Agregar</Btn>
+            </div>
+          </Modal>}
+        </div>
+      )}
 
-          <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(auto-fill,minmax(160px,1fr))',gap:10}}>
-            {(bookFilter==='all'?books:books.filter(b=>b.status===bookFilter)).map(b=>{
-              const st=BOOK_STATUSES.find(s=>s.id===b.status);
-              return <div key={b.id} onClick={()=>setSelBook(selBook?.id===b.id?null:b)}
-                style={{padding:'12px 14px',background:T.surface,border:`1px solid ${selBook?.id===b.id?T.accent:T.border}`,borderRadius:10,cursor:'pointer',borderTop:`3px solid ${st?.color||T.border}`}}>
-                <div style={{color:T.text,fontSize:13,fontWeight:600,marginBottom:4,lineHeight:1.3}}>{b.title}</div>
-                {b.author&&<div style={{color:T.muted,fontSize:11,marginBottom:6}}>{b.author}</div>}
-                {b.rating>0&&<div style={{display:'flex',gap:1}}>{[1,2,3,4,5].map(i=><span key={i} style={{color:i<=b.rating?T.accent:T.border,fontSize:11}}>★</span>)}</div>}
-              </div>;
-            })}
-            {books.length===0&&<div style={{gridColumn:'1/-1',textAlign:'center',padding:'40px 0',color:T.dim}}>
-              <div style={{fontSize:36,marginBottom:8}}>📚</div>
-              <div style={{fontSize:14,marginBottom:12}}>Sin libros aún</div>
-              <Btn size="sm" onClick={()=>{setEditingBook(false);setModalBook(true);}}><Icon name="plus" size={13}/>Agregar</Btn>
-            </div>}
+      {/* ── POMODORO ── */}
+      {tab==='pomodoro'&&(
+        <Card style={{padding:isMobile?20:28,textAlign:'center'}}>
+          <div style={{fontSize:12,fontWeight:700,color:pomMode==='focus'?T.red:T.accent,textTransform:'uppercase',letterSpacing:2,marginBottom:16}}>
+            {pomMode==='focus'?'🍅 Enfoque':'☕ Descanso'}
+            {selCourse&&learnings.find(l=>l.id===selCourse)&&<span style={{color:T.muted,fontWeight:400,marginLeft:8,textTransform:'none'}}>— {learnings.find(l=>l.id===selCourse)?.title?.split(' ')[0]}</span>}
           </div>
-        </div>
-      )}
-
-      {/* ══════════ APRENDIZAJES ══════════ */}
-      {tab==='aprendizajes'&&(
-        <div>
-          {learnings.length===0
-            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
-               <div style={{fontSize:36,marginBottom:8}}>📖</div>
-               <div style={{fontSize:14,marginBottom:12}}>Sin aprendizajes registrados</div>
-               <Btn size="sm" onClick={()=>setModalLearn(true)}><Icon name="plus" size={13}/>Agregar</Btn>
-             </div>
-            :[...learnings].sort((a,b)=>(a.status==='done'?1:0)-(b.status==='done'?1:0)).map(l=>(
-              <div key={l.id} style={{padding:'14px 16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,marginBottom:10,borderLeft:`3px solid ${l.status==='done'?T.green:T.accent}`,opacity:l.status==='done'?0.7:1}}>
-                <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
-                  <div style={{flex:1}}>
-                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                      <span style={{color:T.text,fontSize:14,fontWeight:600}}>{l.name}</span>
-                      {l.status==='done'&&<span style={{fontSize:11,color:T.green,background:`${T.green}18`,padding:'2px 8px',borderRadius:8}}>✅ Completado</span>}
-                      {l.category&&<span style={{fontSize:11,color:T.purple,background:`${T.purple}15`,padding:'2px 8px',borderRadius:8}}>{l.category}</span>}
-                    </div>
-                    {l.platform&&<div style={{color:T.muted,fontSize:12,marginTop:3}}>📍 {l.platform}</div>}
-                    {l.notes&&<div style={{color:T.dim,fontSize:11,marginTop:4}}>{l.notes}</div>}
-                    {/* Progress bar */}
-                    <div style={{marginTop:10}}>
-                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                        <span style={{fontSize:11,color:T.muted}}>Progreso</span>
-                        <span style={{fontSize:11,fontWeight:600,color:T.accent}}>{l.progress||0}%</span>
-                      </div>
-                      <div style={{height:6,background:T.surface2,borderRadius:4,overflow:'hidden'}}>
-                        <div style={{height:'100%',width:`${l.progress||0}%`,background:l.status==='done'?T.green:T.accent,borderRadius:4,transition:'width 0.3s'}}/>
-                      </div>
-                    </div>
-                    <div style={{display:'flex',gap:12,marginTop:8,flexWrap:'wrap'}}>
-                      {l.hoursSpent>0&&<span style={{fontSize:11,color:T.muted}}>⏱ {l.hoursSpent}h invertidas</span>}
-                      {l.hoursTotal>0&&<span style={{fontSize:11,color:T.muted}}>🎯 {l.hoursTotal}h estimadas</span>}
-                    </div>
-                  </div>
-                  <div style={{display:'flex',flexDirection:'column',gap:6,flexShrink:0,alignItems:'flex-end'}}>
-                    {l.status!=='done'&&(
-                      <>
-                        <div style={{display:'flex',gap:4}}>
-                          <button onClick={()=>updateProgress(l.id,-10)} style={{padding:'4px 8px',background:T.surface2,border:`1px solid ${T.border}`,borderRadius:7,cursor:'pointer',color:T.muted,fontSize:12,fontFamily:'inherit'}}>−10%</button>
-                          <button onClick={()=>updateProgress(l.id,10)}  style={{padding:'4px 8px',background:T.surface2,border:`1px solid ${T.border}`,borderRadius:7,cursor:'pointer',color:T.muted,fontSize:12,fontFamily:'inherit'}}>+10%</button>
-                        </div>
-                        <button onClick={()=>completeLearn(l.id)}
-                          style={{padding:'5px 10px',background:`${T.green}18`,border:`1px solid ${T.green}40`,borderRadius:8,cursor:'pointer',color:T.green,fontSize:11,fontWeight:600,fontFamily:'inherit'}}>
-                          ✓ Completar
-                        </button>
-                      </>
-                    )}
-                    <button onClick={()=>delLearn(l.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
-                  </div>
-                </div>
+          <div style={{position:'relative',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:24}}>
+            <svg width={160} height={160} style={{transform:'rotate(-90deg)'}}>
+              <circle cx={80} cy={80} r={68} fill="none" stroke={T.border} strokeWidth={10}/>
+              <circle cx={80} cy={80} r={68} fill="none" stroke={pomMode==='focus'?T.red:T.accent} strokeWidth={10}
+                strokeDasharray={`${2*Math.PI*68*(pomPct/100)} ${2*Math.PI*68}`} strokeLinecap="round"
+                style={{transition:'stroke-dasharray 1s linear'}}/>
+            </svg>
+            <div style={{position:'absolute',textAlign:'center'}}>
+              <div style={{fontSize:38,fontWeight:800,color:T.text,lineHeight:1}}>{fmtTime(pomSeconds)}</div>
+              <div style={{fontSize:11,color:T.muted,marginTop:4}}>{pomCycles} ciclos · {studyMin}min hoy</div>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:10,justifyContent:'center',marginBottom:16}}>
+            <Btn onClick={()=>setPomActive(!pomActive)} style={{padding:'10px 28px',fontSize:14}}>
+              {pomActive?'⏸ Pausar':'▶ Iniciar'}
+            </Btn>
+            <button onClick={()=>{setPomActive(false);setPomSeconds(25*60);setPomMode('focus');}}
+              style={{padding:'10px 16px',borderRadius:12,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:16,fontFamily:'inherit'}}>↺</button>
+          </div>
+          {learnings.length>0&&(
+            <div style={{borderTop:`1px solid ${T.border}`,paddingTop:14}}>
+              <div style={{fontSize:11,color:T.muted,marginBottom:8}}>Estudiando:</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'center'}}>
+                {learnings.map((l,i)=>{
+                  const color=lColor(l,i);
+                  const isSel=selCourse===l.id;
+                  return (
+                    <button key={l.id} onClick={()=>setSelCourse(isSel?null:l.id)}
+                      style={{padding:'5px 12px',borderRadius:8,border:`1px solid ${isSel?color:T.border}`,background:isSel?`${color}20`:'transparent',color:isSel?color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+                      {l.title.split(' ')[0]}
+                    </button>
+                  );
+                })}
               </div>
-            ))
-          }
-        </div>
+            </div>
+          )}
+        </Card>
       )}
 
-      {/* ══════════ RETROSPECTIVAS ══════════ */}
-      {tab==='retrospectivas'&&(
-        <div>
-          {retros.length===0
-            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
-               <div style={{fontSize:36,marginBottom:8}}>🔄</div>
-               <div style={{fontSize:14,marginBottom:12}}>Sin retrospectivas aún</div>
-               <Btn size="sm" onClick={()=>setModalRetro(true)}><Icon name="plus" size={13}/>Nueva retro</Btn>
-             </div>
-            :[...retros].sort((a,b)=>b.date.localeCompare(a.date)).map(r=>(
-              <div key={r.id} style={{padding:'16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,marginBottom:12,borderLeft:`3px solid ${T.purple}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                    <span style={{fontSize:13,fontWeight:700,color:T.text}}>Retro {r.period}</span>
-                    <span style={{fontSize:11,color:T.purple,background:`${T.purple}15`,padding:'2px 8px',borderRadius:8}}>{fmtDate(r.date)}</span>
-                  </div>
-                  <button onClick={()=>delRetro(r.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
-                </div>
-                {r.wentWell&&<div style={{marginBottom:10}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.green,marginBottom:4}}>✅ Qué salió bien</div>
-                  <div style={{color:T.text,fontSize:13,lineHeight:1.6}}>{r.wentWell}</div>
-                </div>}
-                {r.improve&&<div style={{marginBottom:10}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.orange,marginBottom:4}}>🔧 Qué mejorar</div>
-                  <div style={{color:T.text,fontSize:13,lineHeight:1.6}}>{r.improve}</div>
-                </div>}
-                {r.learned&&<div>
-                  <div style={{fontSize:11,fontWeight:600,color:T.blue,marginBottom:4}}>💡 Qué aprendí</div>
-                  <div style={{color:T.text,fontSize:13,lineHeight:1.6}}>{r.learned}</div>
-                </div>}
-              </div>
-            ))
-          }
-        </div>
-      )}
-
-      {/* ══════════ IDEAS ══════════ */}
+      {/* ── IDEAS MOODBOARD ── */}
       {tab==='ideas'&&(
         <div>
-          {ideas.length===0
-            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
-               <div style={{fontSize:36,marginBottom:8}}>💡</div>
-               <div style={{fontSize:14,marginBottom:12}}>Sin ideas registradas</div>
-               <Btn size="sm" onClick={()=>setModalIdea(true)}><Icon name="plus" size={13}/>Capturar</Btn>
-             </div>
-            :[...ideas].sort((a,b)=>b.date.localeCompare(a.date)).map(i=>(
-              <div key={i.id} style={{padding:'14px 16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,marginBottom:8,borderLeft:`3px solid ${T.orange}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
-                  <div style={{flex:1}}>
-                    {i.tag&&<span style={{fontSize:11,color:T.orange,background:`${T.orange}15`,padding:'2px 8px',borderRadius:8,display:'inline-block',marginBottom:6}}>{i.tag}</span>}
-                    <div style={{color:T.text,fontSize:14,lineHeight:1.6}}>{i.content}</div>
-                    <div style={{color:T.dim,fontSize:11,marginTop:6}}>{fmtDate(i.date)}</div>
-                  </div>
-                  <button onClick={()=>delIdea(i.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex',flexShrink:0}}><Icon name="trash" size={13}/></button>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+              <button onClick={()=>setIdeaFilter('all')}
+                style={{padding:'4px 12px',borderRadius:8,border:`1px solid ${ideaFilter==='all'?T.purple:T.border}`,background:ideaFilter==='all'?`${T.purple}18`:'transparent',color:ideaFilter==='all'?T.purple:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+                Todas
+              </button>
+              {uniqueTags.map(t=>(
+                <button key={t} onClick={()=>setIdeaFilter(ideaFilter===t?'all':t)}
+                  style={{padding:'4px 12px',borderRadius:8,border:`1px solid ${ideaFilter===t?T.purple:T.border}`,background:ideaFilter===t?`${T.purple}18`:'transparent',color:ideaFilter===t?T.purple:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <Btn size="sm" onClick={()=>setIdeaModal(true)}><Icon name="plus" size={12}/>Idea</Btn>
+          </div>
+          <div style={{columns:isMobile?1:2,gap:10,columnFill:'balance'}}>
+            {filteredIdeas.map(idea=>{
+              const tagColors={'💡 Idea':T.blue,'✍️ Escritura':T.purple,'🎓 Educación':T.orange,'📋 Plantilla':T.accent,'🚀 Proyecto':T.red,'🔧 Herramienta':T.yellow};
+              const color=tagColors[idea.tag]||T.blue;
+              return (
+                <div key={idea.id} style={{breakInside:'avoid',marginBottom:10,background:T.surface,border:`1.5px solid ${color}35`,borderLeft:`3px solid ${color}`,borderRadius:12,padding:'13px 14px',position:'relative'}}>
+                  <div style={{fontSize:10,fontWeight:700,color,background:`${color}15`,display:'inline-block',padding:'2px 8px',borderRadius:6,marginBottom:7}}>{idea.tag}</div>
+                  <p style={{fontSize:13,color:T.text,margin:0,lineHeight:1.6}}>{idea.content}</p>
+                  <button onClick={()=>delIdea(idea.id)} style={{position:'absolute',top:10,right:10,background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2}}><Icon name="trash" size={11}/></button>
                 </div>
-              </div>
-            ))
-          }
+              );
+            })}
+          </div>
+          {!filteredIdeas.length&&<div style={{textAlign:'center',padding:'30px 0',color:T.dim}}><p style={{fontSize:14}}>Sin ideas aún — ¡captura todo!</p><Btn size="sm" onClick={()=>setIdeaModal(true)} style={{marginTop:8}}><Icon name="plus" size={12}/>Nueva idea</Btn></div>}
+          {ideaModal&&<Modal title="Nueva idea" onClose={()=>setIdeaModal(false)}>
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+              <Textarea value={ideaForm.content} onChange={v=>setIdeaForm(f=>({...f,content:v}))} placeholder="¿Qué tienes en mente?" rows={4}/>
+              <Select value={ideaForm.tag} onChange={v=>setIdeaForm(f=>({...f,tag:v}))}>
+                {IDEA_TAGS.map(t=><option key={t} value={t}>{t}</option>)}
+              </Select>
+              <Btn onClick={saveIdea} style={{width:'100%',justifyContent:'center'}}>Guardar idea</Btn>
+            </div>
+          </Modal>}
         </div>
       )}
 
-      {/* ══════════ MODALES ══════════ */}
-      {modalBook&&(
-        <Modal title={editingBook?'Editar libro':'Nuevo libro'} onClose={()=>{setModalBook(false);setEditingBook(false);}}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Input value={bookForm.title} onChange={v=>setBookForm(f=>({...f,title:v}))} placeholder="Título"/>
-            <Input value={bookForm.author} onChange={v=>setBookForm(f=>({...f,author:v}))} placeholder="Autor"/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={bookForm.genre} onChange={v=>setBookForm(f=>({...f,genre:v}))} placeholder="Género"/>
-              <Input type="number" value={bookForm.pages} onChange={v=>setBookForm(f=>({...f,pages:v}))} placeholder="Páginas"/>
-            </div>
-            <Select value={bookForm.status} onChange={v=>setBookForm(f=>({...f,status:v}))}>
-              {BOOK_STATUSES.map(s=><option key={s.id} value={s.id}>{s.emoji} {s.label}</option>)}
-            </Select>
+      {/* ── RETROSPECTIVA ── */}
+      {tab==='retro'&&(
+        <div>
+          <Card style={{padding:18,marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:14,color:T.text,marginBottom:4}}>📋 Retrospectiva semanal</div>
+            <div style={{fontSize:12,color:T.muted,marginBottom:14}}>{new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}</div>
+            {[
+              {key:'bien',q:'¿Qué salió bien esta semana?',color:T.accent,icon:'✅'},
+              {key:'mejorar',q:'¿Qué mejorar la próxima semana?',color:T.orange,icon:'🔧'},
+              {key:'aprendi',q:'¿Qué aprendí?',color:T.blue,icon:'💡'},
+              {key:'intencion',q:'Intención para la próxima semana',color:T.purple,icon:'🎯'},
+            ].map(s=>(
+              <div key={s.key} style={{marginBottom:14}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                  <span>{s.icon}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:s.color}}>{s.q}</span>
+                </div>
+                <Textarea value={retroForm[s.key]} onChange={v=>setRetroForm(f=>({...f,[s.key]:v}))} placeholder="" rows={2}/>
+              </div>
+            ))}
+            <Btn onClick={saveRetro} style={{width:'100%',justifyContent:'center'}}>Guardar retrospectiva</Btn>
+          </Card>
+          {retros.length>0&&(
             <div>
-              <div style={{color:T.muted,fontSize:12,marginBottom:6}}>Calificación</div>
-              <StarRating val={bookForm.rating} onChange={v=>setBookForm(f=>({...f,rating:v}))}/>
+              <h3 style={{color:T.muted,fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:10}}>Retrospectivas anteriores</h3>
+              {retros.slice(0,3).map(r=>(
+                <Card key={r.id} style={{marginBottom:10,padding:14}}>
+                  <div style={{fontSize:11,color:T.muted,marginBottom:8}}>{fmt(r.date)}</div>
+                  {r.bien&&<p style={{fontSize:12,color:T.text,margin:'0 0 4px'}}><span style={{color:T.accent}}>✅</span> {r.bien}</p>}
+                  {r.aprendi&&<p style={{fontSize:12,color:T.text,margin:0}}><span style={{color:T.blue}}>💡</span> {r.aprendi}</p>}
+                </Card>
+              ))}
             </div>
-            <Textarea value={bookForm.review} onChange={v=>setBookForm(f=>({...f,review:v}))} placeholder="Reseña o notas..." rows={3}/>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={()=>saveBook(editingBook)} style={{flex:1,justifyContent:'center'}}>{editingBook?'Guardar cambios':'Agregar'}</Btn>
-            <Btn variant="ghost" onClick={()=>{setModalBook(false);setEditingBook(false);}}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {modalLearn&&(
-        <Modal title="Nuevo aprendizaje" onClose={()=>setModalLearn(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Input value={learnForm.name} onChange={v=>setLearnForm(f=>({...f,name:v}))} placeholder="¿Qué estás aprendiendo? (ej: Python, Inglés B2...)"/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={learnForm.platform} onChange={v=>setLearnForm(f=>({...f,platform:v}))} placeholder="Plataforma / Recurso"/>
-              <Select value={learnForm.category} onChange={v=>setLearnForm(f=>({...f,category:v}))}>
-                <option value="">— Categoría —</option>
-                {LEARN_CATS.map(c=><option key={c}>{c}</option>)}
-              </Select>
-            </div>
-            <div>
-              <div style={{fontSize:12,color:T.muted,marginBottom:6}}>Progreso actual: {learnForm.progress}%</div>
-              <input type="range" min={0} max={100} step={5} value={learnForm.progress}
-                onChange={e=>setLearnForm(f=>({...f,progress:Number(e.target.value)}))}
-                style={{width:'100%',accentColor:T.accent}}/>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input type="number" value={learnForm.hoursSpent} onChange={v=>setLearnForm(f=>({...f,hoursSpent:v}))} placeholder="Horas invertidas"/>
-              <Input type="number" value={learnForm.hoursTotal} onChange={v=>setLearnForm(f=>({...f,hoursTotal:v}))} placeholder="Horas estimadas"/>
-            </div>
-            <Textarea value={learnForm.notes} onChange={v=>setLearnForm(f=>({...f,notes:v}))} placeholder="Notas..." rows={2}/>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={saveLearn} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
-            <Btn variant="ghost" onClick={()=>setModalLearn(false)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {modalRetro&&(
-        <Modal title="Nueva retrospectiva" onClose={()=>setModalRetro(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Select value={retroForm.period} onChange={v=>setRetroForm(f=>({...f,period:v}))}>
-                {['semanal','mensual','trimestral','anual'].map(p=><option key={p}>{p}</option>)}
-              </Select>
-              <Input value={retroForm.date} onChange={v=>setRetroForm(f=>({...f,date:v}))} type="date"/>
-            </div>
-            <div>
-              <div style={{fontSize:12,fontWeight:600,color:T.green,marginBottom:6}}>✅ ¿Qué salió bien?</div>
-              <Textarea value={retroForm.wentWell} onChange={v=>setRetroForm(f=>({...f,wentWell:v}))} placeholder="Logros, momentos positivos, lo que funcionó..." rows={3}/>
-            </div>
-            <div>
-              <div style={{fontSize:12,fontWeight:600,color:T.orange,marginBottom:6}}>🔧 ¿Qué mejorar?</div>
-              <Textarea value={retroForm.improve} onChange={v=>setRetroForm(f=>({...f,improve:v}))} placeholder="Áreas de mejora, obstáculos, friction..." rows={3}/>
-            </div>
-            <div>
-              <div style={{fontSize:12,fontWeight:600,color:T.blue,marginBottom:6}}>💡 ¿Qué aprendí?</div>
-              <Textarea value={retroForm.learned} onChange={v=>setRetroForm(f=>({...f,learned:v}))} placeholder="Insights, lecciones, conclusiones clave..." rows={3}/>
-            </div>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={saveRetro} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
-            <Btn variant="ghost" onClick={()=>setModalRetro(false)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {modalIdea&&(
-        <Modal title="Capturar idea / reflexión" onClose={()=>setModalIdea(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Select value={ideaForm.tag} onChange={v=>setIdeaForm(f=>({...f,tag:v}))}>
-                <option value="">— Etiqueta —</option>
-                {IDEA_TAGS.map(t=><option key={t}>{t}</option>)}
-              </Select>
-              <Input value={ideaForm.date} onChange={v=>setIdeaForm(f=>({...f,date:v}))} type="date"/>
-            </div>
-            <Textarea value={ideaForm.content} onChange={v=>setIdeaForm(f=>({...f,content:v}))} placeholder="Escribe tu idea, insight o reflexión..." rows={5}/>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={saveIdea} style={{flex:1,justifyContent:'center'}}>Capturar</Btn>
-            <Btn variant="ghost" onClick={()=>setModalIdea(false)}>Cancelar</Btn>
-          </div>
-        </Modal>
+          )}
+        </div>
       )}
     </div>
   );
 };
+
 
 // ===================== HOGAR =====================
 const Hogar = ({data,setData,isMobile,onBack}) => {
@@ -4604,644 +5322,493 @@ const Hogar = ({data,setData,isMobile,onBack}) => {
 
 // ===================== HEALTH =====================
 const Health = ({data,setData,isMobile,onBack}) => {
-  const [tab,setTab]=useState('metricas');
-  const [modalMetric,setModalMetric]=useState(false);
-  const [modalMed,setModalMed]=useState(false);
-  const [modalWorkout,setModalWorkout]=useState(false);
-  const [editMetric,setEditMetric]=useState(null);
-  const [editMed,setEditMed]=useState(null);
-  const [editWorkout,setEditWorkout]=useState(null);
-  const [editMetricForm,setEditMetricForm]=useState({});
-  const [editMedForm,setEditMedForm]=useState({});
-  const [editWorkoutForm,setEditWorkoutForm]=useState({});
-  const [metricForm,setMetricForm]=useState({type:'peso',value:'',unit:'kg',date:today(),note:''});
-  const [medForm,setMedForm]=useState({name:'',dose:'',unit:'mg',frequency:'diario',time:'08:00',stock:''});
-  const [workoutForm,setWorkoutForm]=useState({type:'Correr',duration:'',calories:'',distance:'',date:today(),note:''});
+  const [tab,setTab]=useState('trends');
+  const [metric,setMetric]=useState('peso');
+  const [workoutModal,setWorkoutModal]=useState(false);
+  const [metricModal,setMetricModal]=useState(false);
+  const [wForm,setWForm]=useState({type:'Gym',date:today(),duration:60,calories:0,distance:''});
+  const [mForm,setMForm]=useState({metric:'peso',value:'',date:today()});
 
-  const metrics  = data.healthMetrics||[];
-  const meds     = data.medications||[];
-  const workouts = data.workouts||[];
-
-  // ── Metric helpers ──
-  const METRIC_TYPES=[
-    {id:'peso',      label:'Peso',           unit:'kg',   icon:'⚖️'},
-    {id:'presion',   label:'Presión arterial',unit:'mmHg',icon:'🫀'},
-    {id:'glucosa',   label:'Glucosa',        unit:'mg/dL',icon:'🩸'},
-    {id:'sueno',     label:'Sueño',          unit:'hrs',  icon:'😴'},
-    {id:'pasos',     label:'Pasos',          unit:'pasos',icon:'👟'},
-    {id:'agua',      label:'Agua',           unit:'L',    icon:'💧'},
-    {id:'otro',      label:'Otro',           unit:'',     icon:'📊'},
-  ];
-  const metricInfo=(id)=>METRIC_TYPES.find(m=>m.id===id)||METRIC_TYPES[0];
-
-  // last value per type
-  const lastMetric=(type)=>[...metrics].filter(m=>m.type===type).sort((a,b)=>b.date.localeCompare(a.date))[0];
-  const pesoLast   = lastMetric('peso');
-  const suenoLast  = lastMetric('sueno');
-
-  // avg sleep this month
-  const thisMonth  = today().slice(0,7);
-  const suenoMonth = metrics.filter(m=>m.type==='sueno'&&m.date.slice(0,7)===thisMonth);
-  const avgSueno   = suenoMonth.length ? (suenoMonth.reduce((s,m)=>s+(Number(m.value)||0),0)/suenoMonth.length).toFixed(1) : null;
-
-  // workout streak
-  const workoutDays=[...new Set(workouts.map(w=>w.date))].sort((a,b)=>b.localeCompare(a));
-  let streak=0;
-  const d=new Date();
-  for(let i=0;i<workoutDays.length;i++){
-    const dd=new Date(d); dd.setDate(dd.getDate()-i);
-    const key=`${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}`;
-    if(workoutDays.includes(key)) streak++; else break;
-  }
-
-  // meds taken today
-  const medsTakenToday = meds.filter(m=>(m.takenDates||[]).includes(today()));
-
-  const saveMetric=()=>{
-    if(!metricForm.value) return;
-    const m={id:uid(),...metricForm,createdAt:today()};
-    const upd=[m,...metrics]; setData(d=>({...d,healthMetrics:upd})); save('healthMetrics',upd);
-    setModalMetric(false); setMetricForm({type:'peso',value:'',unit:'kg',date:today(),note:''});
-  };
-  const delMetric=(id)=>{ const u=metrics.filter(m=>m.id!==id); setData(d=>({...d,healthMetrics:u})); save('healthMetrics',u); };
-  const updateMetric=()=>{
-    if(!editMetricForm.value) return;
-    const upd=metrics.map(m=>m.id===editMetric.id?{...m,...editMetricForm}:m);
-    setData(d=>({...d,healthMetrics:upd})); save('healthMetrics',upd); setEditMetric(null);
-  };
-
-  const saveMed=()=>{
-    if(!medForm.name.trim()) return;
-    const m={id:uid(),...medForm,takenDates:[],createdAt:today()};
-    const upd=[m,...meds]; setData(d=>({...d,medications:upd})); save('medications',upd);
-    setModalMed(false); setMedForm({name:'',dose:'',unit:'mg',frequency:'diario',time:'08:00',stock:''});
-  };
-  const toggleMedToday=(id)=>{
-    const upd=meds.map(m=>{
-      if(m.id!==id) return m;
-      const taken=m.takenDates||[];
-      return {...m,takenDates:taken.includes(today())?taken.filter(d=>d!==today()):[...taken,today()]};
-    });
-    setData(d=>({...d,medications:upd})); save('medications',upd);
-  };
-  const delMed=(id)=>{ const u=meds.filter(m=>m.id!==id); setData(d=>({...d,medications:u})); save('medications',u); };
-  const updateMed=()=>{
-    if(!editMedForm.name?.trim()) return;
-    const upd=meds.map(m=>m.id===editMed.id?{...m,...editMedForm}:m);
-    setData(d=>({...d,medications:upd})); save('medications',upd); setEditMed(null);
-  };
+  const workouts=data.workouts||[];
+  const metrics=data.healthMetrics||{};
 
   const saveWorkout=()=>{
-    if(!workoutForm.duration) return;
-    const w={id:uid(),...workoutForm,duration:Number(workoutForm.duration),calories:Number(workoutForm.calories)||0,createdAt:today()};
-    const upd=[w,...workouts]; setData(d=>({...d,workouts:upd})); save('workouts',upd);
-    setModalWorkout(false); setWorkoutForm({type:'Correr',duration:'',calories:'',distance:'',date:today(),note:''});
+    if(!wForm.type||!wForm.duration)return;
+    const upd=[{id:uid(),...wForm,duration:Number(wForm.duration),calories:Number(wForm.calories||0)},...workouts];
+    setData(d=>({...d,workouts:upd}));save('workouts',upd);
+    setWorkoutModal(false);setWForm({type:'Gym',date:today(),duration:60,calories:0,distance:''});
   };
-  const delWorkout=(id)=>{ const u=workouts.filter(w=>w.id!==id); setData(d=>({...d,workouts:u})); save('workouts',u); };
-  const updateWorkout=()=>{
-    if(!editWorkoutForm.duration) return;
-    const upd=workouts.map(w=>w.id===editWorkout.id?{...w,...editWorkoutForm,duration:Number(editWorkoutForm.duration),calories:Number(editWorkoutForm.calories)||0}:w);
-    setData(d=>({...d,workouts:upd})); save('workouts',upd); setEditWorkout(null);
+  const saveMetric=()=>{
+    if(!mForm.value)return;
+    const key=mForm.metric;
+    const entry={date:mForm.date,value:Number(mForm.value)};
+    const prev=metrics[key]||[];
+    const upd={...metrics,[key]:[...prev.filter(e=>e.date!==mForm.date),entry].sort((a,b)=>a.date.localeCompare(b.date))};
+    setData(d=>({...d,healthMetrics:upd}));save('healthMetrics',upd);
+    setMetricModal(false);setMForm({metric:'peso',value:'',date:today()});
+  };
+  const delWorkout=(id)=>{const u=workouts.filter(w=>w.id!==id);setData(d=>({...d,workouts:u}));save('workouts',u);};
+
+  const METRIC_CFG={
+    peso:  {label:'Peso',  unit:'kg',color:T.blue,   goal:75, goalLabel:'Meta: 75 kg',  icon:'⚖️',lowerBetter:true},
+    sueño: {label:'Sueño', unit:'h', color:T.purple,  goal:8,  goalLabel:'Meta: 8h',     icon:'😴',lowerBetter:false},
+    pasos: {label:'Pasos', unit:'',  color:T.accent,  goal:10000,goalLabel:'Meta: 10k', icon:'👟',lowerBetter:false},
+    agua:  {label:'Agua',  unit:'L', color:T.blue,    goal:2,  goalLabel:'Meta: 2L',     icon:'💧',lowerBetter:false},
   };
 
-  const WORKOUT_TYPES=['Correr','Caminar','Ciclismo','Natación','Gym','Yoga','HIIT','Fútbol','Basquetbol','Otro'];
-  const fmtDate=(d)=>{ try{ return new Date(d+'T12:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short'}); }catch{return d;} };
+  const cfg=METRIC_CFG[metric]||METRIC_CFG.peso;
+  const mData=metrics[metric]||[];
+  const latest=mData.length?mData[mData.length-1]?.value:null;
+  const prev=mData.length>1?mData[mData.length-2]?.value:null;
+  const delta=latest!=null&&prev!=null?(latest-prev):null;
+  const goalPct=latest!=null?Math.min(Math.round((latest/cfg.goal)*100),200):0;
+  const goalColor=cfg.lowerBetter
+    ?(goalPct<=100?T.accent:goalPct<=120?T.orange:T.red)
+    :(goalPct>=100?T.accent:goalPct>=70?T.orange:T.red);
 
-  // mini trend for a metric type (last 7 entries)
-  const trendData=(type)=>[...metrics].filter(m=>m.type===type).sort((a,b)=>a.date.localeCompare(b.date)).slice(-7);
+  // Workout stats
+  const last7Days=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
+  const weekWorkouts=workouts.filter(w=>last7Days.includes(w.date));
+  const weekCal=weekWorkouts.reduce((s,w)=>s+(w.calories||0),0);
+  const weekMin=weekWorkouts.reduce((s,w)=>s+(w.duration||0),0);
 
-  // ── Inline sparkline ──
-  const Sparkline=({points,color})=>{
-    if(points.length<2) return null;
-    const vals=points.map(p=>Number(p.value));
-    const min=Math.min(...vals), max=Math.max(...vals), range=max-min||1;
-    const W=80,H=28;
-    const pts=vals.map((v,i)=>`${(i/(vals.length-1))*W},${H-((v-min)/range)*H}`).join(' ');
-    return <svg width={W} height={H} style={{display:'block'}}><polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-  };
+  // Workout streak
+  const sortedDates=[...new Set(workouts.map(w=>w.date))].sort().reverse();
+  let wStreak=0;
+  const ref=new Date();
+  for(let i=0;i<sortedDates.length;i++){
+    const d=new Date(sortedDates[i]);
+    const diff=Math.floor((ref-d)/86400000);
+    if(diff===i||(i===0&&diff<=1)){wStreak++;}else break;
+  }
+
+  const WORKOUT_TYPES=['Gym','Correr','Ciclismo','Natación','Yoga','HIIT','Caminata','Otro'];
+  const wtIcon=(t)=>t==='Correr'?'🏃':t==='Gym'?'🏋️':t==='Ciclismo'?'🚴':t==='Natación'?'🏊':t==='Yoga'?'🧘':t==='HIIT'?'⚡':t==='Caminata'?'🚶':'💪';
+
+  const fmtVal=v=>metric==='pasos'?Number(v).toLocaleString():v;
+
+  const GOALS=[
+    {label:'Peso objetivo',icon:'⚖️',metric:'peso',current:mData.length?mData[mData.length-1].value+'kg':'—',goal:'75 kg',pct:Math.min(Math.round((mData.length?(75/mData[mData.length-1].value)*100:0)),100),color:T.blue,inv:true},
+    {label:'Sueño promedio',icon:'😴',metric:'sueño',current:(metrics.sueño||[]).slice(-7).length?((metrics.sueño||[]).slice(-7).reduce((s,e)=>s+e.value,0)/Math.min(7,(metrics.sueño||[]).length)).toFixed(1)+'h':'—',goal:'8h/noche',pct:Math.min(Math.round(((metrics.sueño||[]).slice(-7).length?((metrics.sueño||[]).slice(-7).reduce((s,e)=>s+e.value,0)/(7*8))*100:0)),100),color:T.purple,inv:false},
+    {label:'Pasos diarios',icon:'👟',metric:'pasos',current:(metrics.pasos||[]).slice(-7).length?Math.round((metrics.pasos||[]).slice(-7).reduce((s,e)=>s+e.value,0)/(metrics.pasos||[]).slice(-7).length).toLocaleString():'—',goal:'10,000',pct:Math.min(Math.round(((metrics.pasos||[]).slice(-7).length?((metrics.pasos||[]).slice(-7).reduce((s,e)=>s+e.value,0)/((metrics.pasos||[]).slice(-7).length*10000))*100:0)),100),color:T.accent,inv:false},
+    {label:'Entrenos/semana',icon:'🏋️',current:`${weekWorkouts.length}`,goal:'4 sesiones',pct:Math.min(Math.round((weekWorkouts.length/4)*100),100),color:T.orange,inv:false},
+  ];
 
   return (
     <div>
-      <PageHeader isMobile={isMobile} title="💪 Salud" onBack={onBack}
-        subtitle="Métricas, medicamentos y actividad física"
-        action={
-          <div style={{display:'flex',gap:8}}>
-            {tab==='metricas' &&<Btn size="sm" onClick={()=>setModalMetric(true)} ><Icon name="plus" size={14}/>Métrica</Btn>}
-            {tab==='medicamentos'&&<Btn size="sm" onClick={()=>setModalMed(true)}    ><Icon name="plus" size={14}/>Med</Btn>}
-            {tab==='actividad'  &&<Btn size="sm" onClick={()=>setModalWorkout(true)} ><Icon name="plus" size={14}/>Actividad</Btn>}
-          </div>
-        }
-      />
+      <PageHeader title="💪 Salud" subtitle="Seguimiento y tendencias" isMobile={isMobile} onBack={onBack}
+        action={<div style={{display:'flex',gap:6}}>
+          <Btn size="sm" variant="ghost" onClick={()=>setMetricModal(true)}>+ Métrica</Btn>
+          <Btn size="sm" onClick={()=>setWorkoutModal(true)}><Icon name="plus" size={12}/>Entreno</Btn>
+        </div>}/>
 
-      {/* ── Summary cards ── */}
-      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:10,marginBottom:20}}>
+      {/* Summary row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
         {[
-          {label:'Peso actual',   val:pesoLast?`${pesoLast.value} kg`:'—',       color:T.blue},
-          {label:'Promedio sueño',val:avgSueno?`${avgSueno} hrs`:'—',            color:T.purple},
-          {label:'Racha activa',  val:`${streak} día${streak!==1?'s':''}`,        color:T.accent},
-          {label:'Meds hoy',      val:`${medsTakenToday.length}/${meds.length}`,  color:meds.length>0&&medsTakenToday.length===meds.length?T.green:T.orange},
+          {label:'Racha entrenos',val:`🔥 ${wStreak}d`,color:T.orange},
+          {label:'Esta semana',val:`${weekWorkouts.length} sesiones`,color:T.blue},
+          {label:'Calorías 7d',val:weekCal>0?weekCal.toLocaleString():'—',color:T.red},
         ].map(s=>(
-          <Card key={s.label} style={{textAlign:'center',padding:14}}>
-            <div style={{fontSize:11,color:T.muted,marginBottom:4}}>{s.label}</div>
-            <div style={{fontSize:isMobile?18:22,fontWeight:700,color:s.color}}>{s.val}</div>
+          <Card key={s.label} style={{padding:12,textAlign:'center'}}>
+            <div style={{fontSize:13,fontWeight:800,color:s.color}}>{s.val}</div>
+            <div style={{fontSize:10,color:T.muted,marginTop:3}}>{s.label}</div>
           </Card>
         ))}
       </div>
 
-      {/* ── Tabs ── */}
-      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
-        {[{id:'metricas',label:'📊 Métricas'},{id:'medicamentos',label:'💊 Medicamentos'},{id:'actividad',label:'🏃 Actividad'}].map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:'7px 16px',borderRadius:10,border:`1px solid ${tab===t.id?T.accent:T.border}`,background:tab===t.id?`${T.accent}18`:'transparent',color:tab===t.id?T.accent:T.muted,cursor:'pointer',fontSize:13,fontWeight:tab===t.id?600:400,fontFamily:'inherit'}}>
-            {t.label}
+      {/* Tab nav */}
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+        {[['trends','📈 Tendencias'],['workouts','🏃 Entrenos'],['goals','🎯 Metas']].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)}
+            style={{padding:'6px 14px',borderRadius:10,border:`1px solid ${tab===id?T.green:T.border}`,background:tab===id?`${T.green}18`:'transparent',color:tab===id?T.green:T.muted,cursor:'pointer',fontSize:12,fontWeight:tab===id?700:400,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+            {label}
           </button>
         ))}
       </div>
 
-      {/* ══════════ MÉTRICAS ══════════ */}
-      {tab==='metricas'&&(
-        <div>
-          {/* Cards por tipo con sparkline */}
-          <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:12,marginBottom:20}}>
-            {METRIC_TYPES.filter(mt=>metrics.some(m=>m.type===mt.id)).map(mt=>{
-              const last=lastMetric(mt.id);
-              const trend=trendData(mt.id);
-              return (
-                <Card key={mt.id} style={{padding:'14px 16px'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                    <div>
-                      <div style={{fontSize:11,color:T.muted,marginBottom:2}}>{mt.icon} {mt.label}</div>
-                      <div style={{fontSize:22,fontWeight:700,color:T.text}}>{last?.value} <span style={{fontSize:13,color:T.muted,fontWeight:400}}>{last?.unit||mt.unit}</span></div>
-                      <div style={{fontSize:11,color:T.dim,marginTop:2}}>{fmtDate(last?.date)}</div>
-                    </div>
-                    <Sparkline points={trend} color={T.accent}/>
-                  </div>
-                </Card>
-              );
-            })}
+      {/* ── TRENDS ── */}
+      {tab==='trends'&&(
+        <Card style={{padding:18}}>
+          <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
+            {Object.entries(METRIC_CFG).map(([k,c])=>(
+              <button key={k} onClick={()=>setMetric(k)}
+                style={{padding:'5px 12px',borderRadius:9,border:`1px solid ${metric===k?c.color:T.border}`,background:metric===k?`${c.color}18`:'transparent',color:metric===k?c.color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+                {c.icon} {c.label}
+              </button>
+            ))}
           </div>
-
-          {/* Historial completo */}
-          {metrics.length===0
-            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
-               <div style={{fontSize:36,marginBottom:8}}>📊</div>
-               <div style={{fontSize:14,marginBottom:12}}>Sin métricas registradas</div>
-               <Btn size="sm" onClick={()=>setModalMetric(true)}><Icon name="plus" size={13}/>Agregar</Btn>
-             </div>
-            :<div>
-               <div style={{fontSize:13,fontWeight:600,color:T.muted,marginBottom:10}}>Historial reciente</div>
-               {[...metrics].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20).map(m=>{
-                 const mt=metricInfo(m.type);
-                 return (
-                   <div key={m.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:7,borderLeft:`3px solid ${T.accent}`}}>
-                     <span style={{fontSize:20,flexShrink:0}}>{mt.icon}</span>
-                     <div style={{flex:1}}>
-                       <div style={{color:T.text,fontSize:13,fontWeight:500}}>{mt.label}</div>
-                       {m.note&&<div style={{color:T.muted,fontSize:11,marginTop:1}}>{m.note}</div>}
-                     </div>
-                     <div style={{textAlign:'right',flexShrink:0}}>
-                       <div style={{fontWeight:700,color:T.accent,fontSize:15}}>{m.value} <span style={{fontSize:11,color:T.muted,fontWeight:400}}>{m.unit||mt.unit}</span></div>
-                       <div style={{color:T.dim,fontSize:11}}>{fmtDate(m.date)}</div>
-                     </div>
-                     <button onClick={()=>{setEditMetric(m);setEditMetricForm({type:m.type,value:m.value,unit:m.unit||mt.unit,date:m.date,note:m.note||''});}} style={{background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:7,color:T.accent,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',flexShrink:0,fontSize:11}}>✏️</button>
-                     <button onClick={()=>delMetric(m.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
-                   </div>
-                 );
-               })}
-             </div>
-          }
-        </div>
-      )}
-
-      {/* ══════════ MEDICAMENTOS ══════════ */}
-      {tab==='medicamentos'&&(
-        <div>
-          {meds.length===0
-            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
-               <div style={{fontSize:36,marginBottom:8}}>💊</div>
-               <div style={{fontSize:14,marginBottom:12}}>Sin medicamentos registrados</div>
-               <Btn size="sm" onClick={()=>setModalMed(true)}><Icon name="plus" size={13}/>Agregar</Btn>
-             </div>
-            :<div>
-               <div style={{fontSize:12,color:T.muted,marginBottom:12}}>Toca el check para marcar como tomado hoy</div>
-               {meds.map(m=>{
-                 const taken=(m.takenDates||[]).includes(today());
-                 return (
-                   <div key={m.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',background:T.surface,border:`1px solid ${taken?T.green:T.border}`,borderRadius:12,marginBottom:10,transition:'border-color 0.2s'}}>
-                     <button onClick={()=>toggleMedToday(m.id)}
-                       style={{width:32,height:32,borderRadius:10,border:`2px solid ${taken?T.green:T.border}`,background:taken?`${T.green}20`:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.2s'}}>
-                       {taken&&<Icon name="check" size={16} color={T.green}/>}
-                     </button>
-                     <div style={{flex:1}}>
-                       <div style={{color:T.text,fontSize:14,fontWeight:600}}>{m.name}</div>
-                       <div style={{color:T.muted,fontSize:12,marginTop:2,display:'flex',gap:10,flexWrap:'wrap'}}>
-                         {m.dose&&<span>💊 {m.dose} {m.unit}</span>}
-                         <span>🔁 {m.frequency}</span>
-                         {m.time&&<span>⏰ {m.time}</span>}
-                         {m.stock&&<span style={{color:Number(m.stock)<5?T.red:T.muted}}>📦 {m.stock} restantes</span>}
-                       </div>
-                     </div>
-                     <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,flexShrink:0}}>
-                       <span style={{fontSize:10,fontWeight:600,color:taken?T.green:T.dim}}>{taken?'✓ Hoy':'Pendiente'}</span>
-                       <div style={{display:'flex',gap:4}}>
-                         <button onClick={()=>{setEditMed(m);setEditMedForm({name:m.name,dose:m.dose||'',unit:m.unit||'mg',frequency:m.frequency||'diario',time:m.time||'08:00',stock:m.stock||''});}} style={{background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:7,color:T.accent,cursor:'pointer',padding:'3px 6px',display:'flex',alignItems:'center',fontSize:11}}>✏️</button>
-                         <button onClick={()=>delMed(m.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2,display:'flex'}}><Icon name="trash" size={12}/></button>
-                       </div>
-                     </div>
-                   </div>
-                 );
-               })}
-             </div>
-          }
-        </div>
-      )}
-
-      {/* ══════════ ACTIVIDAD ══════════ */}
-      {tab==='actividad'&&(
-        <div>
-          {/* Stats mes actual */}
-          {workouts.length>0&&(()=>{
-            const wMonth=workouts.filter(w=>w.date.slice(0,7)===thisMonth);
-            const totalMin=wMonth.reduce((s,w)=>s+(w.duration||0),0);
-            const totalCal=wMonth.reduce((s,w)=>s+(w.calories||0),0);
-            return (
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
-                {[
-                  {label:'Sesiones',val:wMonth.length,color:T.accent},
-                  {label:'Minutos',  val:totalMin,     color:T.blue},
-                  {label:'Calorías', val:totalCal,     color:T.orange},
-                ].map(s=>(
-                  <Card key={s.label} style={{textAlign:'center',padding:12}}>
-                    <div style={{fontSize:11,color:T.muted,marginBottom:2}}>{s.label}</div>
-                    <div style={{fontSize:20,fontWeight:700,color:s.color}}>{s.val.toLocaleString()}</div>
-                  </Card>
-                ))}
-              </div>
-            );
-          })()}
-
-          {workouts.length===0
-            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
-               <div style={{fontSize:36,marginBottom:8}}>🏃</div>
-               <div style={{fontSize:14,marginBottom:12}}>Sin actividad registrada</div>
-               <Btn size="sm" onClick={()=>setModalWorkout(true)}><Icon name="plus" size={13}/>Agregar</Btn>
-             </div>
-            :[...workouts].sort((a,b)=>b.date.localeCompare(a.date)).map(w=>(
-              <div key={w.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,marginBottom:8,borderLeft:`3px solid ${T.orange}`}}>
-                <div style={{width:40,height:40,borderRadius:12,background:`${T.orange}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>
-                  {w.type==='Correr'?'🏃':w.type==='Ciclismo'?'🚴':w.type==='Natación'?'🏊':w.type==='Yoga'?'🧘':w.type==='HIIT'?'⚡':w.type==='Caminar'?'🚶':w.type==='Gym'?'🏋️':'⚽'}
+          {mData.length===0?(
+            <div style={{textAlign:'center',padding:'24px 0',color:T.dim}}>
+              <p style={{fontSize:14,marginBottom:8}}>Sin registros de {cfg.label.toLowerCase()} aún</p>
+              <Btn size="sm" onClick={()=>{setMForm(f=>({...f,metric}));setMetricModal(true);}}>+ Registrar {cfg.label}</Btn>
+            </div>
+          ):(
+            <>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+                <div>
+                  <div style={{fontSize:28,fontWeight:800,color:cfg.color}}>{fmtVal(latest)} <span style={{fontSize:14,color:T.muted,fontWeight:400}}>{cfg.unit}</span></div>
+                  {delta!=null&&<div style={{fontSize:12,marginTop:3,color:cfg.lowerBetter?(delta<=0?T.accent:T.red):(delta>=0?T.accent:T.red)}}>
+                    {delta>0?'▲':'▼'} {Math.abs(delta).toFixed(metric==='pasos'?0:1)} {cfg.unit} vs anterior
+                  </div>}
                 </div>
-                <div style={{flex:1}}>
-                  <div style={{color:T.text,fontSize:14,fontWeight:600}}>{w.type}</div>
-                  <div style={{color:T.muted,fontSize:12,marginTop:2,display:'flex',gap:10,flexWrap:'wrap'}}>
-                    <span>⏱ {w.duration} min</span>
-                    {w.calories>0&&<span>🔥 {w.calories} kcal</span>}
-                    {w.distance&&<span>📍 {w.distance} km</span>}
-                  </div>
-                  {w.note&&<div style={{color:T.dim,fontSize:11,marginTop:3}}>{w.note}</div>}
-                </div>
-                <div style={{textAlign:'right',flexShrink:0}}>
-                  <div style={{color:T.dim,fontSize:12}}>{fmtDate(w.date)}</div>
-                  <div style={{display:'flex',gap:4,marginTop:4}}>
-                    <button onClick={()=>{setEditWorkout(w);setEditWorkoutForm({type:w.type,duration:w.duration,calories:w.calories||'',distance:w.distance||'',date:w.date,note:w.note||''});}} style={{background:`${T.orange}15`,border:`1px solid ${T.orange}30`,borderRadius:7,color:T.orange,cursor:'pointer',padding:'3px 6px',display:'flex',alignItems:'center',fontSize:11}}>✏️</button>
-                    <button onClick={()=>delWorkout(w.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={12}/></button>
-                  </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:11,color:T.muted}}>{cfg.goalLabel}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:goalColor,marginTop:2}}>{cfg.lowerBetter?goalPct<=100?'✓ Dentro de meta':'Por encima':goalPct+'% de meta'}</div>
                 </div>
               </div>
-            ))
-          }
+              <Sparkline data={mData.slice(-14)} color={cfg.color} width={isMobile?280:340} height={60} filled/>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+                <span style={{fontSize:9,color:T.dim}}>{mData.slice(-14)[0]?.date?.slice(5)}</span>
+                <span style={{fontSize:9,color:T.dim}}>{mData[mData.length-1]?.date?.slice(5)}</span>
+              </div>
+              <div style={{marginTop:12}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                  <span style={{fontSize:11,color:T.muted}}>Progreso hacia meta</span>
+                  <span style={{fontSize:11,fontWeight:700,color:goalColor}}>{cfg.lowerBetter?goalPct<=100?'✓':''+goalPct+'%':goalPct+'%'}</span>
+                </div>
+                <div style={{height:6,background:T.border,borderRadius:3,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${Math.min(cfg.lowerBetter?Math.max(0,200-goalPct):goalPct,100)}%`,background:goalColor,borderRadius:3,transition:'width 0.6s'}}/>
+                </div>
+              </div>
+              <div style={{marginTop:10,textAlign:'right'}}>
+                <button onClick={()=>{setMForm(f=>({...f,metric}));setMetricModal(true);}} style={{fontSize:11,color:T.accent,background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}}>+ Registrar {cfg.label}</button>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
+      {/* ── WORKOUTS ── */}
+      {tab==='workouts'&&(
+        <div>
+          <Card style={{marginBottom:12,padding:14}}>
+            <div style={{fontWeight:600,fontSize:13,color:T.text,marginBottom:10}}>Resumen semanal</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
+              {[
+                {l:'Sesiones',v:weekWorkouts.length,c:T.accent},
+                {l:'Minutos',v:weekMin,c:T.blue},
+                {l:'Calorías',v:weekCal||'—',c:T.red},
+                {l:'Racha',v:`🔥${wStreak}d`,c:T.orange},
+              ].map(s=>(
+                <div key={s.l} style={{textAlign:'center',padding:'6px 4px'}}>
+                  <div style={{fontSize:15,fontWeight:800,color:s.c}}>{s.v}</div>
+                  <div style={{fontSize:9,color:T.muted,marginTop:2}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+          {workouts.slice(0,10).map(w=>(
+            <div key={w.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,marginBottom:6}}>
+              <div style={{width:36,height:36,borderRadius:9,background:`${T.blue}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{wtIcon(w.type)}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.text}}>{w.type}</div>
+                <div style={{fontSize:11,color:T.muted,marginTop:2}}>{fmt(w.date)} · {w.duration}min{w.distance?` · ${w.distance}`:''}</div>
+              </div>
+              {w.calories>0&&<div style={{fontSize:13,fontWeight:700,color:T.red,flexShrink:0}}>{w.calories} kcal</div>}
+              <button onClick={()=>delWorkout(w.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4}}><Icon name="trash" size={12}/></button>
+            </div>
+          ))}
+          {!workouts.length&&<div style={{textAlign:'center',padding:'30px 0',color:T.dim}}><p style={{fontSize:14}}>Sin entrenamientos registrados</p><Btn size="sm" onClick={()=>setWorkoutModal(true)} style={{marginTop:8}}><Icon name="plus" size={12}/>Registrar entreno</Btn></div>}
         </div>
       )}
 
-      {/* ══════════ MODALES ══════════ */}
-      {modalMetric&&(
-        <Modal title="Nueva métrica" onClose={()=>setModalMetric(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Select value={metricForm.type} onChange={v=>setMetricForm(f=>({...f,type:v,unit:metricInfo(v).unit}))}>
-              {METRIC_TYPES.map(mt=><option key={mt.id} value={mt.id}>{mt.icon} {mt.label}</option>)}
-            </Select>
-            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:10}}>
-              <Input value={metricForm.value} onChange={v=>setMetricForm(f=>({...f,value:v}))} placeholder="Valor" type="number"/>
-              <Input value={metricForm.unit} onChange={v=>setMetricForm(f=>({...f,unit:v}))} placeholder="Unidad"/>
+      {/* ── GOALS ── */}
+      {tab==='goals'&&(
+        <Card style={{padding:18}}>
+          <div style={{fontWeight:700,fontSize:14,color:T.text,marginBottom:14}}>Metas de salud</div>
+          {GOALS.map(g=>(
+            <div key={g.label} style={{marginBottom:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                <div style={{display:'flex',alignItems:'center',gap:7}}>
+                  <span>{g.icon}</span>
+                  <span style={{fontSize:13,fontWeight:600,color:T.text}}>{g.label}</span>
+                </div>
+                <div style={{fontSize:12,color:T.muted}}><strong style={{color:g.color}}>{g.current}</strong> / {g.goal}</div>
+              </div>
+              <div style={{height:7,background:T.border,borderRadius:4,overflow:'hidden'}}>
+                <div style={{height:'100%',width:`${g.pct}%`,background:g.color,borderRadius:4,transition:'width 0.6s'}}/>
+              </div>
+              <div style={{fontSize:10,color:g.pct>=100?T.accent:T.muted,marginTop:3,textAlign:'right'}}>{g.pct>=100?'✅ Meta alcanzada':`${g.pct}%`}</div>
             </div>
-            <Input value={metricForm.date} onChange={v=>setMetricForm(f=>({...f,date:v}))} type="date"/>
-            <Input value={metricForm.note} onChange={v=>setMetricForm(f=>({...f,note:v}))} placeholder="Nota opcional"/>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={saveMetric} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
-            <Btn variant="ghost" onClick={()=>setModalMetric(false)}>Cancelar</Btn>
-          </div>
-        </Modal>
+          ))}
+        </Card>
       )}
 
-      {modalMed&&(
-        <Modal title="Nuevo medicamento" onClose={()=>setModalMed(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Input value={medForm.name} onChange={v=>setMedForm(f=>({...f,name:v}))} placeholder="Nombre (ej: Vitamina D, Metformina...)"/>
-            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:10}}>
-              <Input value={medForm.dose} onChange={v=>setMedForm(f=>({...f,dose:v}))} placeholder="Dosis" type="number"/>
-              <Select value={medForm.unit} onChange={v=>setMedForm(f=>({...f,unit:v}))}>
-                {['mg','mcg','mL','g','UI','gotas','tabletas'].map(u=><option key={u}>{u}</option>)}
-              </Select>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Select value={medForm.frequency} onChange={v=>setMedForm(f=>({...f,frequency:v}))}>
-                {['diario','cada 8h','cada 12h','semanal','mensual','según necesidad'].map(fr=><option key={fr}>{fr}</option>)}
-              </Select>
-              <Input value={medForm.time} onChange={v=>setMedForm(f=>({...f,time:v}))} type="time"/>
-            </div>
-            <Input value={medForm.stock} onChange={v=>setMedForm(f=>({...f,stock:v}))} placeholder="Unidades en stock (opcional)" type="number"/>
+      {/* Workout modal */}
+      {workoutModal&&<Modal title="Nuevo entreno" onClose={()=>setWorkoutModal(false)}>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <Select value={wForm.type} onChange={v=>setWForm(f=>({...f,type:v}))}>
+            {WORKOUT_TYPES.map(t=><option key={t} value={t}>{wtIcon(t)} {t}</option>)}
+          </Select>
+          <Input type="date" value={wForm.date} onChange={v=>setWForm(f=>({...f,date:v}))}/>
+          <div style={{display:'flex',gap:8}}>
+            <div style={{flex:1}}><label style={{fontSize:11,color:T.muted}}>Duración (min)</label><Input type="number" value={wForm.duration} onChange={v=>setWForm(f=>({...f,duration:v}))}/></div>
+            <div style={{flex:1}}><label style={{fontSize:11,color:T.muted}}>Calorías</label><Input type="number" value={wForm.calories} onChange={v=>setWForm(f=>({...f,calories:v}))}/></div>
           </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={saveMed} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
-            <Btn variant="ghost" onClick={()=>setModalMed(false)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
+          <Input value={wForm.distance} onChange={v=>setWForm(f=>({...f,distance:v}))} placeholder="Distancia (ej: 5.2km) — opcional"/>
+          <Btn onClick={saveWorkout} style={{width:'100%',justifyContent:'center'}}>Guardar entreno</Btn>
+        </div>
+      </Modal>}
 
-      {modalWorkout&&(
-        <Modal title="Nueva actividad" onClose={()=>setModalWorkout(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Select value={workoutForm.type} onChange={v=>setWorkoutForm(f=>({...f,type:v}))}>
-              {WORKOUT_TYPES.map(t=><option key={t}>{t}</option>)}
-            </Select>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={workoutForm.duration} onChange={v=>setWorkoutForm(f=>({...f,duration:v}))} placeholder="Duración (min)" type="number"/>
-              <Input value={workoutForm.calories} onChange={v=>setWorkoutForm(f=>({...f,calories:v}))} placeholder="Calorías" type="number"/>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={workoutForm.distance} onChange={v=>setWorkoutForm(f=>({...f,distance:v}))} placeholder="Distancia (km)"/>
-              <Input value={workoutForm.date} onChange={v=>setWorkoutForm(f=>({...f,date:v}))} type="date"/>
-            </div>
-            <Input value={workoutForm.note} onChange={v=>setWorkoutForm(f=>({...f,note:v}))} placeholder="Nota (ej: PR en 5k, sesión intensa...)"/>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={saveWorkout} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
-            <Btn variant="ghost" onClick={()=>setModalWorkout(false)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {/* ── Edit: métrica ── */}
-      {editMetric&&(
-        <Modal title="Editar métrica" onClose={()=>setEditMetric(null)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Select value={editMetricForm.type||'peso'} onChange={v=>setEditMetricForm(f=>({...f,type:v,unit:metricInfo(v).unit}))}>
-              {METRIC_TYPES.map(mt=><option key={mt.id} value={mt.id}>{mt.icon} {mt.label}</option>)}
-            </Select>
-            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:10}}>
-              <Input value={editMetricForm.value||''} onChange={v=>setEditMetricForm(f=>({...f,value:v}))} placeholder="Valor" type="number"/>
-              <Input value={editMetricForm.unit||''} onChange={v=>setEditMetricForm(f=>({...f,unit:v}))} placeholder="Unidad"/>
-            </div>
-            <Input value={editMetricForm.date||''} onChange={v=>setEditMetricForm(f=>({...f,date:v}))} type="date"/>
-            <Input value={editMetricForm.note||''} onChange={v=>setEditMetricForm(f=>({...f,note:v}))} placeholder="Nota opcional"/>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={updateMetric} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
-            <Btn variant="ghost" onClick={()=>setEditMetric(null)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {/* ── Edit: medicamento ── */}
-      {editMed&&(
-        <Modal title="Editar medicamento" onClose={()=>setEditMed(null)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Input value={editMedForm.name||''} onChange={v=>setEditMedForm(f=>({...f,name:v}))} placeholder="Nombre del medicamento"/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={editMedForm.dose||''} onChange={v=>setEditMedForm(f=>({...f,dose:v}))} placeholder="Dosis" type="number"/>
-              <Select value={editMedForm.unit||'mg'} onChange={v=>setEditMedForm(f=>({...f,unit:v}))}>
-                {['mg','ml','mcg','UI','gotas','tableta'].map(u=><option key={u}>{u}</option>)}
-              </Select>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Select value={editMedForm.frequency||'diario'} onChange={v=>setEditMedForm(f=>({...f,frequency:v}))}>
-                {['diario','cada 8h','cada 12h','semanal','mensual','cuando sea necesario'].map(fr=><option key={fr}>{fr}</option>)}
-              </Select>
-              <Input value={editMedForm.time||''} onChange={v=>setEditMedForm(f=>({...f,time:v}))} type="time"/>
-            </div>
-            <Input value={editMedForm.stock||''} onChange={v=>setEditMedForm(f=>({...f,stock:v}))} placeholder="Stock disponible" type="number"/>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={updateMed} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
-            <Btn variant="ghost" onClick={()=>setEditMed(null)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {/* ── Edit: actividad ── */}
-      {editWorkout&&(
-        <Modal title="Editar actividad" onClose={()=>setEditWorkout(null)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Select value={editWorkoutForm.type||'Correr'} onChange={v=>setEditWorkoutForm(f=>({...f,type:v}))}>
-              {WORKOUT_TYPES.map(t=><option key={t}>{t}</option>)}
-            </Select>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={editWorkoutForm.duration||''} onChange={v=>setEditWorkoutForm(f=>({...f,duration:v}))} placeholder="Duración (min)" type="number"/>
-              <Input value={editWorkoutForm.calories||''} onChange={v=>setEditWorkoutForm(f=>({...f,calories:v}))} placeholder="Calorías" type="number"/>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={editWorkoutForm.distance||''} onChange={v=>setEditWorkoutForm(f=>({...f,distance:v}))} placeholder="Distancia (km)"/>
-              <Input value={editWorkoutForm.date||''} onChange={v=>setEditWorkoutForm(f=>({...f,date:v}))} type="date"/>
-            </div>
-            <Input value={editWorkoutForm.note||''} onChange={v=>setEditWorkoutForm(f=>({...f,note:v}))} placeholder="Nota"/>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={updateWorkout} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
-            <Btn variant="ghost" onClick={()=>setEditWorkout(null)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
+      {/* Metric modal */}
+      {metricModal&&<Modal title="Registrar métrica" onClose={()=>setMetricModal(false)}>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <Select value={mForm.metric} onChange={v=>setMForm(f=>({...f,metric:v}))}>
+            {Object.entries(METRIC_CFG).map(([k,c])=><option key={k} value={k}>{c.icon} {c.label} ({c.unit||'unidades'})</option>)}
+          </Select>
+          <Input type="number" value={mForm.value} onChange={v=>setMForm(f=>({...f,value:v}))} placeholder={`Valor en ${METRIC_CFG[mForm.metric]?.unit||'unidades'}`}/>
+          <Input type="date" value={mForm.date} onChange={v=>setMForm(f=>({...f,date:v}))}/>
+          <Btn onClick={saveMetric} style={{width:'100%',justifyContent:'center'}}>Guardar</Btn>
+        </div>
+      </Modal>}
     </div>
   );
 };
+
 const Finance = ({data,setData,isMobile,onBack}) => {
   const [modal,setModal]=useState(false);
   const [editTx,setEditTx]=useState(null);
   const [editBudget,setEditBudget]=useState(null);
   const [tab,setTab]=useState('movimientos');
+  const [chartTab,setChartTab]=useState('overview');
   const [filter,setFilter]=useState('all');
   const [monthFilter,setMonthFilter]=useState(today().slice(0,7));
   const [form,setForm]=useState({type:'egreso',amount:'',category:'',description:'',date:today(),currency:'MXN',areaId:''});
   const [editTxForm,setEditTxForm]=useState({});
   const [editBudgetForm,setEditBudgetForm]=useState({});
 
-  const txs = data.transactions||[];
-  const budgets = data.budget||[];
+  const txs=data.transactions||[];
+  const budgets=data.budget||[];
 
-  // ── helpers ──
-  const months = [...new Set(txs.map(t=>t.date.slice(0,7)))].sort((a,b)=>b.localeCompare(a));
-  if(months.length>0 && !months.includes(monthFilter)) setMonthFilter(months[0]);
+  const months=[...new Set(txs.map(t=>t.date.slice(0,7)))].sort((a,b)=>b.localeCompare(a));
+  if(months.length>0&&!months.includes(monthFilter)){setMonthFilter(months[0]);}
 
-  const filtered = txs
-    .filter(t=> monthFilter==='all' || t.date.slice(0,7)===monthFilter)
-    .filter(t=> filter==='all' || t.type===filter)
-    .sort((a,b)=>b.date.localeCompare(a.date));
+  const filtered=txs.filter(t=>monthFilter==='all'||t.date.slice(0,7)===monthFilter).filter(t=>filter==='all'||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
+  const allMonth=txs.filter(t=>t.date.slice(0,7)===monthFilter);
+  const totalIngresos=allMonth.filter(t=>t.type==='ingreso').reduce((s,t)=>s+(t.amount||0),0);
+  const totalEgresos=allMonth.filter(t=>t.type==='egreso').reduce((s,t)=>s+(t.amount||0),0);
+  const balance=totalIngresos-totalEgresos;
+  const totalPresupuesto=budgets.reduce((s,b)=>s+(b.amount||0),0);
 
-  const allMonth = txs.filter(t=>t.date.slice(0,7)===monthFilter);
-  const totalIngresos = allMonth.filter(t=>t.type==='ingreso').reduce((s,t)=>s+(t.amount||0),0);
-  const totalEgresos  = allMonth.filter(t=>t.type==='egreso' ).reduce((s,t)=>s+(t.amount||0),0);
-  const balance = totalIngresos - totalEgresos;
-  const totalPresupuesto = budgets.reduce((s,b)=>s+(b.amount||0),0);
+  const catBreakdown={};
+  allMonth.filter(t=>t.type==='egreso').forEach(t=>{const c=t.category||'Sin categoría';catBreakdown[c]=(catBreakdown[c]||0)+t.amount;});
+  const catEntries=Object.entries(catBreakdown).sort((a,b)=>b[1]-a[1]);
 
-  // ── category breakdown ──
-  const catBreakdown = {};
-  allMonth.filter(t=>t.type==='egreso').forEach(t=>{
-    const c=t.category||'Sin categoría';
-    catBreakdown[c]=(catBreakdown[c]||0)+t.amount;
+  const CATS_EGRESO=['Comida','Transporte','Renta','Salud','Entretenimiento','Servicios','Ropa','Educación','Otros'];
+  const CATS_INGRESO=['Salario','Freelance','Inversiones','Ventas','Regalo','Otros'];
+
+  const fmtCurrency=(n)=>`$${Number(n).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0})}`;
+  const monthLabel=(m)=>{try{return new Date(m+'-02').toLocaleDateString('es-ES',{month:'long',year:'numeric'});}catch{return m;}};
+
+  // 6-month bar chart data
+  const sixMonthsData=Array.from({length:6},(_,i)=>{
+    const d=new Date();d.setMonth(d.getMonth()-5+i);
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label=d.toLocaleDateString('es-ES',{month:'short'});
+    const monthTxs=txs.filter(t=>t.date.slice(0,7)===key);
+    return {key,label,income:monthTxs.filter(t=>t.type==='ingreso').reduce((s,t)=>s+(t.amount||0),0),expense:monthTxs.filter(t=>t.type==='egreso').reduce((s,t)=>s+(t.amount||0),0)};
   });
-  const catEntries = Object.entries(catBreakdown).sort((a,b)=>b[1]-a[1]);
+  const balanceTrend=sixMonthsData.map(m=>({value:m.income-m.expense}));
 
-  const CATS_EGRESO  = ['Comida','Transporte','Renta','Salud','Entretenimiento','Servicios','Ropa','Educación','Otros'];
-  const CATS_INGRESO = ['Salario','Freelance','Inversiones','Ventas','Regalo','Otros'];
+  // Budget alerts
+  const budgetAlerts=budgets.map(b=>{
+    const spent=allMonth.filter(t=>t.type==='egreso'&&t.category===b.title).reduce((s,t)=>s+(t.amount||0),0);
+    const pct=b.amount>0?Math.round(spent/b.amount*100):0;
+    return{...b,spent,pct,over:pct>100};
+  }).filter(b=>b.pct>80);
 
-  const saveTx = () => {
-    if(!form.amount||!form.description.trim()) return;
+  // Savings goal
+  const savingGoal=data.savingGoal||0;
+  const savedAmount=balance>0?balance:0;
+  const savePct=savingGoal>0?Math.min(Math.round((savedAmount/savingGoal)*100),100):0;
+
+  const saveTx=()=>{
+    if(!form.amount||!form.description.trim())return;
     const t={id:uid(),...form,amount:Number(form.amount),createdAt:today()};
-    const upd=[t,...txs];
-    setData(d=>({...d,transactions:upd}));
-    save('transactions',upd);
-    setModal(false);
-    setForm({type:'egreso',amount:'',category:'',description:'',date:today(),currency:'MXN',areaId:''});
+    const upd=[t,...txs];setData(d=>({...d,transactions:upd}));save('transactions',upd);
+    setModal(false);setForm({type:'egreso',amount:'',category:'',description:'',date:today(),currency:'MXN',areaId:''});
   };
-
-  const delTx = (id) => {
-    const upd=txs.filter(t=>t.id!==id);
-    setData(d=>({...d,transactions:upd}));
-    save('transactions',upd);
-  };
-
-  const updateTx = () => {
-    if(!editTxForm.amount||!editTxForm.description?.trim()) return;
+  const delTx=(id)=>{const upd=txs.filter(t=>t.id!==id);setData(d=>({...d,transactions:upd}));save('transactions',upd);};
+  const updateTx=()=>{
+    if(!editTxForm.amount||!editTxForm.description?.trim())return;
     const upd=txs.map(t=>t.id===editTx.id?{...t,...editTxForm,amount:Number(editTxForm.amount)}:t);
-    setData(d=>({...d,transactions:upd})); save('transactions',upd);
-    setEditTx(null);
+    setData(d=>({...d,transactions:upd}));save('transactions',upd);setEditTx(null);
   };
-
-  const delBudget = (id) => {
-    const upd=budgets.filter(b=>b.id!==id);
-    setData(d=>({...d,budget:upd}));
-    save('budget',upd);
-  };
-
-  const updateBudget = () => {
-    if(!editBudgetForm.title?.trim()||!editBudgetForm.amount) return;
+  const delBudget=(id)=>{const upd=budgets.filter(b=>b.id!==id);setData(d=>({...d,budget:upd}));save('budget',upd);};
+  const updateBudget=()=>{
+    if(!editBudgetForm.title?.trim()||!editBudgetForm.amount)return;
     const upd=budgets.map(b=>b.id===editBudget.id?{...b,...editBudgetForm,amount:Number(editBudgetForm.amount)}:b);
-    setData(d=>({...d,budget:upd})); save('budget',upd);
-    setEditBudget(null);
+    setData(d=>({...d,budget:upd}));save('budget',upd);setEditBudget(null);
   };
 
-  const fmtCurrency=(n)=>`$${Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-  const monthLabel=(m)=>{ try{ return new Date(m+'-02').toLocaleDateString('es-ES',{month:'long',year:'numeric'}); }catch{return m;} };
+  const exportCSV=()=>{
+    const rows=[['Fecha','Tipo','Categoría','Descripción','Monto','Moneda'],...filtered.map(t=>[t.date,t.type,t.category||'',t.description,t.amount,t.currency||'MXN'])];
+    const csv=rows.map(r=>r.join(',')).join('\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`finanzas_${monthFilter}.csv`;a.click();
+  };
 
   return (
     <div>
       <PageHeader isMobile={isMobile} onBack={onBack}
         title="💰 Finanzas"
         subtitle="Control de ingresos, egresos y presupuesto"
-        action={<Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={14}/>Nuevo</Btn>}
-      />
+        action={<div style={{display:'flex',gap:6}}>
+          <button onClick={exportCSV} style={{padding:'6px 10px',borderRadius:9,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>↓ CSV</button>
+          <Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={14}/>Nuevo</Btn>
+        </div>}/>
 
-      {/* ── Summary cards ── */}
-      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:10,marginBottom:20}}>
+      {/* Summary cards */}
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:10,marginBottom:16}}>
         {[
           {label:'Ingresos',val:totalIngresos,color:T.green,sign:'+'},
-          {label:'Egresos',  val:totalEgresos, color:T.red,  sign:'-'},
-          {label:'Balance',  val:balance,       color:balance>=0?T.green:T.red, sign:balance>=0?'+':'-'},
+          {label:'Egresos',val:totalEgresos,color:T.red,sign:'-'},
+          {label:'Balance',val:balance,color:balance>=0?T.green:T.red,sign:balance>=0?'+':''},
           {label:'Presupuesto/mes',val:totalPresupuesto,color:T.blue,sign:''},
         ].map(s=>(
           <Card key={s.label} style={{textAlign:'center',padding:14}}>
             <div style={{fontSize:11,color:T.muted,marginBottom:4}}>{s.label}</div>
-            <div style={{fontSize:isMobile?16:20,fontWeight:700,color:s.color}}>{s.sign}{fmtCurrency(Math.abs(s.val))}</div>
+            <div style={{fontSize:isMobile?15:18,fontWeight:700,color:s.color}}>{s.sign}{fmtCurrency(Math.abs(s.val))}</div>
             <div style={{fontSize:10,color:T.dim}}>{monthLabel(monthFilter)}</div>
           </Card>
         ))}
       </div>
 
-      {/* ── Tabs ── */}
-      <div style={{display:'flex',gap:8,marginBottom:16}}>
-        {[{id:'movimientos',label:'📋 Movimientos'},{id:'presupuesto',label:'📌 Presupuesto fijo'}].map(t=>(
+      {/* Budget alerts */}
+      {budgetAlerts.length>0&&(
+        <div style={{marginBottom:14}}>
+          {budgetAlerts.map(b=>(
+            <div key={b.id} style={{padding:'9px 14px',borderRadius:10,background:`${b.over?T.red:T.orange}10`,border:`1px solid ${b.over?T.red:T.orange}30`,marginBottom:6,display:'flex',gap:8,alignItems:'center'}}>
+              <span style={{fontSize:15}}>{b.over?'🚨':'⚠️'}</span>
+              <div>
+                <span style={{fontSize:12,fontWeight:700,color:b.over?T.red:T.orange}}>{b.title}</span>
+                <span style={{fontSize:11,color:T.muted,marginLeft:8}}>{fmtCurrency(b.spent)} de {fmtCurrency(b.amount)} ({b.pct}%{b.over?' — EXCEDIDO':''})</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+        {[{id:'movimientos',label:'📋 Movimientos'},{id:'graficos',label:'📊 Gráficos'},{id:'presupuesto',label:'📌 Presupuesto'},{id:'ahorro',label:'🎯 Ahorro'}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:'7px 16px',borderRadius:10,border:`1px solid ${tab===t.id?T.accent:T.border}`,background:tab===t.id?`${T.accent}18`:'transparent',color:tab===t.id?T.accent:T.muted,cursor:'pointer',fontSize:13,fontWeight:tab===t.id?600:400,fontFamily:'inherit'}}>
+            style={{padding:'6px 14px',borderRadius:10,border:`1px solid ${tab===t.id?T.accent:T.border}`,background:tab===t.id?`${T.accent}18`:'transparent',color:tab===t.id?T.accent:T.muted,cursor:'pointer',fontSize:12,fontWeight:tab===t.id?600:400,fontFamily:'inherit',whiteSpace:'nowrap'}}>
             {t.label}
           </button>
         ))}
       </div>
 
+      {/* ── MOVIMIENTOS ── */}
       {tab==='movimientos'&&(
         <div>
-          {/* ── Filters ── */}
           <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
             <select value={monthFilter} onChange={e=>setMonthFilter(e.target.value)}
               style={{background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'6px 12px',borderRadius:10,fontSize:13,outline:'none',cursor:'pointer'}}>
-              {months.length===0
-                ?<option value={today().slice(0,7)}>{monthLabel(today().slice(0,7))}</option>
-                :months.map(m=><option key={m} value={m}>{monthLabel(m)}</option>)
-              }
+              {months.length===0?<option value={today().slice(0,7)}>{monthLabel(today().slice(0,7))}</option>:months.map(m=><option key={m} value={m}>{monthLabel(m)}</option>)}
             </select>
             {['all','ingreso','egreso'].map(f=>(
               <button key={f} onClick={()=>setFilter(f)}
-                style={{padding:'6px 14px',borderRadius:10,border:`1px solid ${filter===f?(f==='egreso'?T.red:f==='ingreso'?T.green:T.accent):T.border}`,background:filter===f?(f==='egreso'?`${T.red}18`:f==='ingreso'?`${T.green}18`:`${T.accent}18`):'transparent',color:filter===f?(f==='egreso'?T.red:f==='ingreso'?T.green:T.accent):T.muted,cursor:'pointer',fontSize:12,fontWeight:filter===f?600:400,fontFamily:'inherit'}}>
+                style={{padding:'6px 14px',borderRadius:10,border:`1px solid ${filter===f?(f==='egreso'?T.red:f==='ingreso'?T.green:T.accent):T.border}`,background:filter===f?(f==='egreso'?`${T.red}18`:f==='ingreso'?`${T.green}18`:`${T.accent}18`):'transparent',color:filter===f?(f==='egreso'?T.red:f==='ingreso'?T.green:T.accent):T.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
                 {f==='all'?'Todos':f==='ingreso'?'Ingresos':'Egresos'}
               </button>
             ))}
           </div>
-
-          {/* ── Category bar chart ── */}
-          {catEntries.length>0&&filter!=='ingreso'&&(
-            <Card style={{marginBottom:16,padding:'14px 16px'}}>
-              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:10}}>Distribución de egresos</div>
-              {catEntries.map(([cat,amt],i)=>{
-                const pct=totalEgresos>0?(amt/totalEgresos)*100:0;
-                const color=T.areaColors[i%T.areaColors.length];
-                return (
-                  <div key={cat} style={{marginBottom:7}}>
-                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                      <span style={{fontSize:12,color:T.muted}}>{cat}</span>
-                      <span style={{fontSize:12,color:color,fontWeight:600}}>{fmtCurrency(amt)} <span style={{color:T.dim,fontWeight:400}}>({pct.toFixed(0)}%)</span></span>
+          {filtered.map(t=>(
+            <div key={t.id} style={{display:'flex',gap:10,alignItems:'center',padding:'10px 14px',background:T.surface,borderRadius:10,marginBottom:6,border:`1px solid ${T.border}`,borderLeft:`3px solid ${t.type==='ingreso'?T.green:T.red}`}}>
+              {editTx?.id===t.id?(
+                <div style={{flex:1,display:'flex',gap:8,flexWrap:'wrap'}}>
+                  <Input style={{flex:2,minWidth:120}} value={editTxForm.description||''} onChange={v=>setEditTxForm(f=>({...f,description:v}))} placeholder="Descripción"/>
+                  <Input type="number" style={{width:90}} value={editTxForm.amount||''} onChange={v=>setEditTxForm(f=>({...f,amount:v}))} placeholder="Monto"/>
+                  <Btn size="sm" onClick={updateTx}>✓</Btn>
+                  <Btn size="sm" variant="ghost" onClick={()=>setEditTx(null)}>✕</Btn>
+                </div>
+              ):(
+                <>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{color:T.text,fontSize:13,fontWeight:500}}>{t.description}</div>
+                    <div style={{display:'flex',gap:8,marginTop:2}}>
+                      {t.category&&<span style={{fontSize:10,color:T.muted}}>{t.category}</span>}
+                      <span style={{fontSize:10,color:T.dim}}>{fmt(t.date)}</span>
                     </div>
-                    <div style={{height:5,background:T.surface2,borderRadius:4,overflow:'hidden'}}>
-                      <div style={{height:'100%',width:`${pct}%`,background:color,borderRadius:4,transition:'width 0.4s'}}/>
-                    </div>
                   </div>
-                );
-              })}
-            </Card>
-          )}
-
-          {/* ── Transaction list ── */}
-          {filtered.length===0
-            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
-               <div style={{fontSize:32,marginBottom:8}}>💸</div>
-               <div style={{fontSize:14,marginBottom:12}}>Sin movimientos</div>
-               <Btn size="sm" onClick={()=>setModal(true)}><Icon name="plus" size={13}/>Agregar</Btn>
-             </div>
-            :filtered.map(t=>(
-              <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:11,marginBottom:8,borderLeft:`3px solid ${t.type==='ingreso'?T.green:T.red}`}}>
-                <div style={{width:36,height:36,borderRadius:10,background:t.type==='ingreso'?`${T.green}18`:`${T.red}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>
-                  {t.type==='ingreso'?'📈':'📉'}
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:T.text,fontSize:13,fontWeight:500}}>{t.description}</div>
-                  <div style={{color:T.muted,fontSize:11,marginTop:2,display:'flex',gap:6,flexWrap:'wrap'}}>
-                    {t.category&&<span style={{background:`${T.accent}15`,color:T.accent,padding:'1px 6px',borderRadius:6}}>{t.category}</span>}
-                    <span>{fmt(t.date)}</span>
-                    {t.currency&&t.currency!=='MXN'&&<span>{t.currency}</span>}
+                  <div style={{fontSize:14,fontWeight:700,color:t.type==='ingreso'?T.green:T.red,flexShrink:0}}>{t.type==='ingreso'?'+':'-'}{fmtCurrency(t.amount)}</div>
+                  <div style={{display:'flex',gap:2,flexShrink:0}}>
+                    <button onClick={()=>{setEditTx(t);setEditTxForm({description:t.description,amount:t.amount,category:t.category,date:t.date});}} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:3}}><Icon name="pencil" size={12}/></button>
+                    <button onClick={()=>delTx(t.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:3}}><Icon name="trash" size={13}/></button>
                   </div>
-                </div>
-                <div style={{textAlign:'right',flexShrink:0}}>
-                  <div style={{fontSize:15,fontWeight:700,color:t.type==='ingreso'?T.green:T.red}}>
-                    {t.type==='ingreso'?'+':'-'}{fmtCurrency(t.amount)}
-                  </div>
-                </div>
-                <button onClick={()=>{setEditTx(t);setEditTxForm({type:t.type,amount:t.amount,category:t.category||'',description:t.description,date:t.date,currency:t.currency||'MXN',areaId:t.areaId||''});}} style={{background:`${T.accent}15`,border:`1px solid ${T.accent}30`,borderRadius:7,color:T.accent,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',flexShrink:0,fontSize:11}}>✏️</button>
-                <button onClick={()=>delTx(t.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex',flexShrink:0}}><Icon name="trash" size={13}/></button>
-              </div>
-            ))
-          }
+                </>
+              )}
+            </div>
+          ))}
+          {!filtered.length&&<p style={{color:T.dim,fontSize:13,textAlign:'center',padding:'20px 0'}}>Sin movimientos{filter!=='all'?` de tipo ${filter}`:''}</p>}
         </div>
       )}
 
+      {/* ── GRÁFICOS ── */}
+      {tab==='graficos'&&(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+            {[['overview','📊 6 meses'],['cats','🗂 Categorías'],['trend','📈 Tendencia']].map(([id,label])=>(
+              <button key={id} onClick={()=>setChartTab(id)}
+                style={{padding:'5px 12px',borderRadius:9,border:`1px solid ${chartTab===id?T.orange:T.border}`,background:chartTab===id?`${T.orange}15`:'transparent',color:chartTab===id?T.orange:T.muted,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {chartTab==='overview'&&(
+            <Card style={{padding:18}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+                <div style={{fontWeight:700,fontSize:14,color:T.text}}>Ingresos vs Egresos — 6 meses</div>
+                <div style={{display:'flex',gap:10}}>
+                  {[[T.accent,'Ingresos'],[T.red,'Egresos']].map(([c,l])=>(
+                    <div key={l} style={{display:'flex',alignItems:'center',gap:4}}>
+                      <div style={{width:7,height:7,borderRadius:2,background:c}}/>
+                      <span style={{fontSize:9,color:T.muted}}>{l}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <BalanceBarChart months={sixMonthsData} height={100}/>
+            </Card>
+          )}
+          {chartTab==='cats'&&catEntries.length>0&&(
+            <Card style={{padding:18}}>
+              <div style={{fontWeight:700,fontSize:14,color:T.text,marginBottom:14}}>Egresos por categoría — {monthLabel(monthFilter)}</div>
+              {catEntries.map(([cat,amt],i)=>(
+                <HBar key={cat} label={cat} value={amt} total={totalEgresos} color={T.areaColors?T.areaColors[i%T.areaColors.length]:T.accent} amount={amt} fmtCurrency={fmtCurrency}/>
+              ))}
+              {!catEntries.length&&<p style={{color:T.dim,fontSize:13,textAlign:'center'}}>Sin egresos con categoría este mes</p>}
+            </Card>
+          )}
+          {chartTab==='cats'&&!catEntries.length&&(
+            <Card style={{padding:18,textAlign:'center'}}><p style={{color:T.dim,fontSize:13}}>Sin egresos categorizados este mes</p></Card>
+          )}
+          {chartTab==='trend'&&(
+            <Card style={{padding:18}}>
+              <div style={{fontWeight:700,fontSize:14,color:T.text,marginBottom:4}}>Balance mensual — tendencia</div>
+              <div style={{fontSize:11,color:T.muted,marginBottom:12}}>Diferencia entre ingresos y egresos por mes</div>
+              <Sparkline data={balanceTrend} color={T.accent} width={isMobile?280:340} height={65} filled/>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+                {sixMonthsData.map(m=><span key={m.key} style={{fontSize:9,color:T.dim}}>{m.label}</span>)}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:14}}>
+                <div style={{background:T.surface2,borderRadius:10,padding:'10px 12px'}}>
+                  <div style={{fontSize:10,color:T.muted}}>Balance este mes</div>
+                  <div style={{fontSize:18,fontWeight:800,color:balance>=0?T.accent:T.red,marginTop:2}}>{balance>=0?'+':''}{fmtCurrency(balance)}</div>
+                </div>
+                <div style={{background:T.surface2,borderRadius:10,padding:'10px 12px'}}>
+                  <div style={{fontSize:10,color:T.muted}}>Mejor mes (6m)</div>
+                  <div style={{fontSize:18,fontWeight:800,color:T.text,marginTop:2}}>{fmtCurrency(Math.max(...sixMonthsData.map(m=>m.income-m.expense),0))}</div>
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── PRESUPUESTO ── */}
       {tab==='presupuesto'&&(
         <div>
           <p style={{color:T.muted,fontSize:13,marginBottom:14}}>Gastos fijos recurrentes que salen cada mes.</p>
@@ -5249,120 +5816,159 @@ const Finance = ({data,setData,isMobile,onBack}) => {
             ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
                <div style={{fontSize:32,marginBottom:8}}>📌</div>
                <div style={{fontSize:14}}>Sin presupuesto fijo registrado</div>
+               <div style={{fontSize:12,color:T.muted,marginTop:4}}>Agrégalos desde el área correspondiente</div>
              </div>
-            :budgets.map(b=>(
-              <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:11,marginBottom:8,borderLeft:`3px solid ${T.blue}`}}>
-                <div style={{width:36,height:36,borderRadius:10,background:`${T.blue}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>💳</div>
-                <div style={{flex:1}}>
-                  <div style={{color:T.text,fontSize:13,fontWeight:500}}>{b.title}</div>
-                  <div style={{color:T.muted,fontSize:11,marginTop:2}}>Día {b.dayOfMonth} de cada mes · {b.currency||'MXN'}</div>
+            :budgets.map(b=>{
+              const spent=allMonth.filter(t=>t.type==='egreso'&&t.category===b.title).reduce((s,t)=>s+(t.amount||0),0);
+              const pct=b.amount>0?Math.round(spent/b.amount*100):0;
+              const alert=pct>100;
+              return (
+                <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:T.surface,border:`1px solid ${alert?T.red:T.border}`,borderRadius:11,marginBottom:8,borderLeft:`3px solid ${alert?T.red:T.blue}`}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:`${T.blue}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>💳</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{color:T.text,fontSize:13,fontWeight:500}}>{b.title}</div>
+                    <div style={{color:T.muted,fontSize:11,marginTop:2}}>Día {b.dayOfMonth} · {b.currency||'MXN'}</div>
+                    {b.amount>0&&<div style={{height:3,background:T.border,borderRadius:2,marginTop:5}}><div style={{height:'100%',width:`${Math.min(pct,100)}%`,background:alert?T.red:T.accent,borderRadius:2,transition:'width 0.4s'}}/></div>}
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{color:alert?T.red:T.blue,fontWeight:700,fontSize:15}}>{fmtCurrency(b.amount)}</div>
+                    {spent>0&&<div style={{fontSize:10,color:alert?T.red:T.muted,marginTop:2}}>{fmtCurrency(spent)} usado ({pct}%)</div>}
+                  </div>
+                  <button onClick={()=>{setEditBudget(b);setEditBudgetForm({title:b.title,amount:b.amount,dayOfMonth:b.dayOfMonth||1,currency:b.currency||'MXN'});}} style={{background:`${T.blue}15`,border:`1px solid ${T.blue}30`,borderRadius:7,color:T.blue,cursor:'pointer',padding:'4px 7px',flexShrink:0,fontSize:11}}>✏️</button>
+                  <button onClick={()=>delBudget(b.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
                 </div>
-                <div style={{color:T.blue,fontWeight:700,fontSize:15,flexShrink:0}}>{fmtCurrency(b.amount)}</div>
-                <button onClick={()=>{setEditBudget(b);setEditBudgetForm({title:b.title,amount:b.amount,dayOfMonth:b.dayOfMonth||1,currency:b.currency||'MXN'});}} style={{background:`${T.blue}15`,border:`1px solid ${T.blue}30`,borderRadius:7,color:T.blue,cursor:'pointer',padding:'4px 7px',display:'flex',alignItems:'center',flexShrink:0,fontSize:11}}>✏️</button>
-                <button onClick={()=>delBudget(b.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex'}}><Icon name="trash" size={13}/></button>
-              </div>
-            ))
+              );
+            })
           }
-          <div style={{marginTop:12,padding:'12px 14px',background:`${T.blue}10`,border:`1px solid ${T.blue}30`,borderRadius:11}}>
+          {budgets.length>0&&<div style={{marginTop:12,padding:'12px 14px',background:`${T.blue}10`,border:`1px solid ${T.blue}30`,borderRadius:11}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span style={{color:T.muted,fontSize:13}}>Total mensual fijo</span>
               <span style={{color:T.blue,fontWeight:700,fontSize:16}}>{fmtCurrency(totalPresupuesto)}</span>
             </div>
-          </div>
+          </div>}
         </div>
       )}
 
-      {/* ── Modal: nuevo movimiento ── */}
-      {modal&&(
-        <Modal title="Nuevo movimiento" onClose={()=>setModal(false)}>
-          <div style={{display:'flex',gap:8,marginBottom:14}}>
-            {['egreso','ingreso'].map(t=>(
-              <button key={t} onClick={()=>setForm(f=>({...f,type:t,category:''}))}
-                style={{flex:1,padding:'9px 0',borderRadius:10,border:`2px solid ${form.type===t?(t==='egreso'?T.red:T.green):T.border}`,background:form.type===t?(t==='egreso'?`${T.red}18`:`${T.green}18`):'transparent',color:form.type===t?(t==='egreso'?T.red:T.green):T.muted,cursor:'pointer',fontWeight:600,fontSize:14,fontFamily:'inherit'}}>
-                {t==='egreso'?'📉 Egreso':'📈 Ingreso'}
-              </button>
-            ))}
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Input value={form.description} onChange={v=>setForm(f=>({...f,description:v}))} placeholder="Descripción (ej: Uber, Nómina...)"/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={form.amount} onChange={v=>setForm(f=>({...f,amount:v}))} placeholder="Monto" type="number"/>
-              <Select value={form.currency} onChange={v=>setForm(f=>({...f,currency:v}))}>
-                {['MXN','USD','EUR','COP','ARS'].map(c=><option key={c}>{c}</option>)}
-              </Select>
-            </div>
-            <Select value={form.category} onChange={v=>setForm(f=>({...f,category:v}))}>
-              <option value="">— Categoría —</option>
-              {(form.type==='egreso'?CATS_EGRESO:CATS_INGRESO).map(c=><option key={c}>{c}</option>)}
-            </Select>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={form.date} onChange={v=>setForm(f=>({...f,date:v}))} type="date"/>
-              <Select value={form.areaId} onChange={v=>setForm(f=>({...f,areaId:v}))}>
-                <option value="">Sin área</option>
-                {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
-              </Select>
+      {/* ── AHORRO ── */}
+      {tab==='ahorro'&&(
+        <Card style={{padding:18}}>
+          <div style={{fontWeight:700,fontSize:14,color:T.text,marginBottom:4}}>🎯 Meta de ahorro mensual</div>
+          <div style={{fontSize:12,color:T.muted,marginBottom:16}}>Configura una meta y sigue tu progreso</div>
+          <div style={{display:'flex',gap:12,alignItems:'center',marginBottom:20}}>
+            <div style={{flex:1}}>
+              <label style={{fontSize:11,color:T.muted}}>Meta de ahorro ($)</label>
+              <Input type="number" value={data.savingGoal||''} onChange={v=>{setData(d=>({...d,savingGoal:Number(v)}));save('savingGoal',Number(v));}} placeholder="8000"/>
             </div>
           </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={saveTx} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
-            <Btn variant="ghost" onClick={()=>setModal(false)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-      {/* ── Modal: editar transacción ── */}
-      {editTx&&(
-        <Modal title="Editar movimiento" onClose={()=>setEditTx(null)}>
-          <div style={{display:'flex',gap:8,marginBottom:14}}>
-            {['egreso','ingreso'].map(t=>(
-              <button key={t} onClick={()=>setEditTxForm(f=>({...f,type:t,category:''}))}
-                style={{flex:1,padding:'9px 0',borderRadius:10,border:`2px solid ${editTxForm.type===t?(t==='egreso'?T.red:T.green):T.border}`,background:editTxForm.type===t?(t==='egreso'?`${T.red}18`:`${T.green}18`):'transparent',color:editTxForm.type===t?(t==='egreso'?T.red:T.green):T.muted,cursor:'pointer',fontWeight:600,fontSize:14,fontFamily:'inherit'}}>
-                {t==='egreso'?'📉 Egreso':'📈 Ingreso'}
-              </button>
-            ))}
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Input value={editTxForm.description||''} onChange={v=>setEditTxForm(f=>({...f,description:v}))} placeholder="Descripción"/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={editTxForm.amount||''} onChange={v=>setEditTxForm(f=>({...f,amount:v}))} placeholder="Monto" type="number"/>
-              <Select value={editTxForm.currency||'MXN'} onChange={v=>setEditTxForm(f=>({...f,currency:v}))}>
-                {['MXN','USD','EUR','COP','ARS'].map(c=><option key={c}>{c}</option>)}
-              </Select>
-            </div>
-            <Select value={editTxForm.category||''} onChange={v=>setEditTxForm(f=>({...f,category:v}))}>
-              <option value="">— Categoría —</option>
-              {(editTxForm.type==='egreso'?CATS_EGRESO:CATS_INGRESO).map(c=><option key={c}>{c}</option>)}
-            </Select>
-            <Input value={editTxForm.date||''} onChange={v=>setEditTxForm(f=>({...f,date:v}))} type="date"/>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={updateTx} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
-            <Btn variant="ghost" onClick={()=>setEditTx(null)}>Cancelar</Btn>
-          </div>
-        </Modal>
+          {savingGoal>0&&(
+            <>
+              <div style={{display:'flex',alignItems:'center',gap:20,marginBottom:16}}>
+                <svg width={100} height={100} style={{transform:'rotate(-90deg)',flexShrink:0}}>
+                  <circle cx={50} cy={50} r={40} fill="none" stroke={T.border} strokeWidth={10}/>
+                  <circle cx={50} cy={50} r={40} fill="none" stroke={savePct>=100?T.accent:T.orange} strokeWidth={10}
+                    strokeDasharray={`${2*Math.PI*40*(savePct/100)} ${2*Math.PI*40}`} strokeLinecap="round"
+                    style={{transition:'stroke-dasharray 0.8s ease'}}/>
+                  <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill={T.text} fontSize={15} fontWeight="800"
+                    style={{transform:'rotate(90deg)',transformOrigin:'center'}}>{savePct}%</text>
+                </svg>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:6}}>{savePct>=100?'✅ ¡Meta alcanzada!':'En progreso...'}</div>
+                  <div style={{fontSize:12,color:T.muted,marginBottom:4}}>Ahorrado: <strong style={{color:T.accent}}>{fmtCurrency(savedAmount)}</strong></div>
+                  <div style={{fontSize:12,color:T.muted}}>Meta: <strong>{fmtCurrency(savingGoal)}</strong></div>
+                  {savePct<100&&<div style={{fontSize:11,color:T.dim,marginTop:4}}>Faltan: {fmtCurrency(savingGoal-savedAmount)}</div>}
+                </div>
+              </div>
+              <div style={{height:8,background:T.border,borderRadius:4,overflow:'hidden'}}>
+                <div style={{height:'100%',width:`${savePct}%`,background:savePct>=100?T.accent:T.orange,borderRadius:4,transition:'width 0.8s'}}/>
+              </div>
+            </>
+          )}
+        </Card>
       )}
 
-      {/* ── Modal: editar presupuesto fijo ── */}
-      {editBudget&&(
-        <Modal title="Editar presupuesto fijo" onClose={()=>setEditBudget(null)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Input value={editBudgetForm.title||''} onChange={v=>setEditBudgetForm(f=>({...f,title:v}))} placeholder="Nombre del gasto"/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <Input value={editBudgetForm.amount||''} onChange={v=>setEditBudgetForm(f=>({...f,amount:v}))} placeholder="Monto" type="number"/>
-              <Select value={editBudgetForm.currency||'MXN'} onChange={v=>setEditBudgetForm(f=>({...f,currency:v}))}>
-                {['MXN','USD','EUR','COP','ARS'].map(c=><option key={c}>{c}</option>)}
-              </Select>
-            </div>
-            <Input value={editBudgetForm.dayOfMonth||''} onChange={v=>setEditBudgetForm(f=>({...f,dayOfMonth:v}))} placeholder="Día del mes (ej: 1)" type="number"/>
+      {/* New transaction modal */}
+      {modal&&<Modal title="Nuevo movimiento" onClose={()=>setModal(false)}>
+        <div style={{display:'flex',gap:8,marginBottom:14}}>
+          {['egreso','ingreso'].map(t=>(
+            <button key={t} onClick={()=>setForm(f=>({...f,type:t,category:''}))}
+              style={{flex:1,padding:'9px 0',borderRadius:10,border:`2px solid ${form.type===t?(t==='egreso'?T.red:T.green):T.border}`,background:form.type===t?(t==='egreso'?`${T.red}18`:`${T.green}18`):'transparent',color:form.type===t?(t==='egreso'?T.red:T.green):T.muted,cursor:'pointer',fontWeight:600,fontSize:14,fontFamily:'inherit'}}>
+              {t==='egreso'?'📉 Egreso':'📈 Ingreso'}
+            </button>
+          ))}
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <Input value={form.description} onChange={v=>setForm(f=>({...f,description:v}))} placeholder="Descripción (ej: Uber, Nómina...)"/>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <Input value={form.amount} onChange={v=>setForm(f=>({...f,amount:v}))} placeholder="Monto" type="number"/>
+            <Select value={form.currency} onChange={v=>setForm(f=>({...f,currency:v}))}>
+              {['MXN','USD','EUR','COP','ARS'].map(c=><option key={c}>{c}</option>)}
+            </Select>
           </div>
-          <div style={{display:'flex',gap:10,marginTop:20}}>
-            <Btn onClick={updateBudget} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
-            <Btn variant="ghost" onClick={()=>setEditBudget(null)}>Cancelar</Btn>
+          <Select value={form.category} onChange={v=>setForm(f=>({...f,category:v}))}>
+            <option value="">— Categoría —</option>
+            {(form.type==='egreso'?CATS_EGRESO:CATS_INGRESO).map(c=><option key={c}>{c}</option>)}
+          </Select>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <Input value={form.date} onChange={v=>setForm(f=>({...f,date:v}))} type="date"/>
+            <Select value={form.areaId} onChange={v=>setForm(f=>({...f,areaId:v}))}>
+              <option value="">Sin área</option>
+              {data.areas.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+            </Select>
           </div>
-        </Modal>
-      )}
+        </div>
+        <div style={{display:'flex',gap:10,marginTop:20}}>
+          <Btn onClick={saveTx} style={{flex:1,justifyContent:'center'}}>Guardar</Btn>
+          <Btn variant="ghost" onClick={()=>setModal(false)}>Cancelar</Btn>
+        </div>
+      </Modal>}
+      {editTx&&<Modal title="Editar movimiento" onClose={()=>setEditTx(null)}>
+        <div style={{display:'flex',gap:8,marginBottom:14}}>
+          {['egreso','ingreso'].map(t=>(
+            <button key={t} onClick={()=>setEditTxForm(f=>({...f,type:t,category:''}))}
+              style={{flex:1,padding:'9px 0',borderRadius:10,border:`2px solid ${editTxForm.type===t?(t==='egreso'?T.red:T.green):T.border}`,background:editTxForm.type===t?(t==='egreso'?`${T.red}18`:`${T.green}18`):'transparent',color:editTxForm.type===t?(t==='egreso'?T.red:T.green):T.muted,cursor:'pointer',fontWeight:600,fontSize:14,fontFamily:'inherit'}}>
+              {t==='egreso'?'📉 Egreso':'📈 Ingreso'}
+            </button>
+          ))}
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <Input value={editTxForm.description||''} onChange={v=>setEditTxForm(f=>({...f,description:v}))} placeholder="Descripción"/>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <Input value={editTxForm.amount||''} onChange={v=>setEditTxForm(f=>({...f,amount:v}))} placeholder="Monto" type="number"/>
+            <Select value={editTxForm.currency||'MXN'} onChange={v=>setEditTxForm(f=>({...f,currency:v}))}>
+              {['MXN','USD','EUR','COP','ARS'].map(c=><option key={c}>{c}</option>)}
+            </Select>
+          </div>
+          <Select value={editTxForm.category||''} onChange={v=>setEditTxForm(f=>({...f,category:v}))}>
+            <option value="">— Categoría —</option>
+            {(editTxForm.type==='egreso'?CATS_EGRESO:CATS_INGRESO).map(c=><option key={c}>{c}</option>)}
+          </Select>
+          <Input value={editTxForm.date||''} onChange={v=>setEditTxForm(f=>({...f,date:v}))} type="date"/>
+        </div>
+        <div style={{display:'flex',gap:10,marginTop:20}}>
+          <Btn onClick={updateTx} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+          <Btn variant="ghost" onClick={()=>setEditTx(null)}>Cancelar</Btn>
+        </div>
+      </Modal>}
+      {editBudget&&<Modal title="Editar presupuesto fijo" onClose={()=>setEditBudget(null)}>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <Input value={editBudgetForm.title||''} onChange={v=>setEditBudgetForm(f=>({...f,title:v}))} placeholder="Nombre del gasto"/>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <Input value={editBudgetForm.amount||''} onChange={v=>setEditBudgetForm(f=>({...f,amount:v}))} placeholder="Monto" type="number"/>
+            <Select value={editBudgetForm.currency||'MXN'} onChange={v=>setEditBudgetForm(f=>({...f,currency:v}))}>
+              {['MXN','USD','EUR','COP','ARS'].map(c=><option key={c}>{c}</option>)}
+            </Select>
+          </div>
+          <Input value={editBudgetForm.dayOfMonth||''} onChange={v=>setEditBudgetForm(f=>({...f,dayOfMonth:v}))} placeholder="Día del mes (ej: 1)" type="number"/>
+        </div>
+        <div style={{display:'flex',gap:10,marginTop:20}}>
+          <Btn onClick={updateBudget} style={{flex:1,justifyContent:'center'}}>Guardar cambios</Btn>
+          <Btn variant="ghost" onClick={()=>setEditBudget(null)}>Cancelar</Btn>
+        </div>
+      </Modal>}
     </div>
   );
 };
+
 
 export default function App() {
   const [view,setView]=useState('dashboard');
