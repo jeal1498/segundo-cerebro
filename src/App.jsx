@@ -5363,6 +5363,8 @@ const Finance = ({data,setData,isMobile,onBack}) => {
     </div>
   );
 };
+
+export default function App() {
   const [view,setView]=useState('dashboard');
   const [viewHint,setViewHint]=useState(null);
   const [data,setData]=useState(null);
