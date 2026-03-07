@@ -7524,9 +7524,36 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
 
       {/* embedded header substitute */}
       {embedded&&(
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <div style={{fontSize:13,color:T.muted}}>{carInfo.brand?`${carInfo.brand} ${carInfo.model} ${carInfo.year} · ${carInfo.plate}`:'Sin datos del vehículo'}</div>
-          <Btn size="sm" variant="ghost" onClick={()=>{setInfoForm({...carInfo});setModalInfo(true);}}>⚙️ Datos del coche</Btn>
+        <div style={{marginBottom:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div style={{fontSize:13,color:T.muted}}>{carInfo.brand?`${carInfo.brand} ${carInfo.model} ${carInfo.year} · ${carInfo.plate}`:'Sin datos del vehículo'}</div>
+            <div style={{display:'flex',gap:6}}>
+              <Btn size="sm" variant="ghost" onClick={()=>setModalNewVehicle(true)}>🚙 +</Btn>
+              <Btn size="sm" variant="ghost" onClick={()=>{setInfoForm({...carInfo});setModalInfo(true);}}>⚙️ Datos</Btn>
+            </div>
+          </div>
+          {/* vehicle pills in embedded mode */}
+          {vehicles.length>0&&(
+            <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:2}}>
+              <button onClick={()=>{setData(d=>({...d,activeVehicleId:null}));save('activeVehicleId',null);}}
+                style={{border:`2px solid ${!activeVehicleId?T.accent:T.border}`,borderRadius:20,padding:'4px 10px',cursor:'pointer',
+                  background:!activeVehicleId?T.accent+'22':T.surface,color:!activeVehicleId?T.accent:T.muted,
+                  fontFamily:'inherit',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>
+                🚗 {carInfo.brand||'Principal'}
+              </button>
+              {vehicles.map(v=>(
+                <div key={v.id} style={{display:'flex',alignItems:'center',gap:3}}>
+                  <button onClick={()=>switchVehicle(v)}
+                    style={{border:`2px solid ${activeVehicleId===v.id?T.accent:T.border}`,borderRadius:20,padding:'4px 10px',cursor:'pointer',
+                      background:activeVehicleId===v.id?T.accent+'22':T.surface,color:activeVehicleId===v.id?T.accent:T.muted,
+                      fontFamily:'inherit',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>
+                    🚙 {v.brand} {v.model}
+                  </button>
+                  <button onClick={()=>deleteVehicle(v.id)} style={{background:'none',border:'none',cursor:'pointer',color:T.muted,fontSize:13,padding:2}}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
