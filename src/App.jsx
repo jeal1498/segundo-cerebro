@@ -876,6 +876,29 @@ const Dashboard = ({data,setData,isMobile,onNavigate}) => {
         ))}
       </div>
 
+      {/* ── Accesos directos a pilares ── */}
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:11,fontWeight:700,color:T.dim,letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Mis pilares</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
+          {[
+            {label:'Salud',      icon:'💪', route:'health',       color:'#4da6ff'},
+            {label:'Finanzas',   icon:'💰', route:'finance',      color:'#00c896'},
+            {label:'Hogar',      icon:'🏠', route:'hogar',        color:'#a78bfa'},
+            {label:'Relaciones', icon:'👥', route:'relaciones',   color:'#ff8c42'},
+            {label:'Desarrollo', icon:'🧠', route:'desarrollo',   color:'#ff5069'},
+            {label:'S. Projects',icon:'🚀', route:'sideprojects', color:'#ffd166'},
+            {label:'Trabajo',    icon:'💼', route:'projects',     color:'#4da6ff'},
+            {label:'Objetivos',  icon:'🎯', route:'objectives',   color:'#00c896'},
+          ].map(p=>(
+            <div key={p.route} onClick={()=>onNavigate&&onNavigate(p.route,null)}
+              style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:'10px 6px',textAlign:'center',cursor:'pointer',transition:'all 0.15s',borderTop:`3px solid ${p.color}`}}>
+              <div style={{fontSize:20,marginBottom:4}}>{p.icon}</div>
+              <div style={{fontSize:10,fontWeight:600,color:T.muted,lineHeight:1.2}}>{p.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div style={{display:isMobile?'block':'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
         {/* LEFT COLUMN */}
         <div>
