@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
 
 // ===================== THEME =====================
 const T = {
@@ -8611,6 +8611,25 @@ const ToastContainer=()=>{
     </div>
   );
 };
+// ===================== ERROR BOUNDARY =====================
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{background:'#090e13',color:'#ff5c5c',padding:24,fontFamily:'monospace',fontSize:13,minHeight:'100vh',overflowY:'auto'}}>
+          <div style={{color:'#00c896',fontSize:18,marginBottom:16}}>🧠 Error detectado</div>
+          <pre style={{whiteSpace:'pre-wrap',wordBreak:'break-all',color:'#ff5c5c'}}>{String(this.state.error)}</pre>
+          <pre style={{whiteSpace:'pre-wrap',wordBreak:'break-all',color:'#6b8299',fontSize:11,marginTop:12}}>{this.state.error?.stack}</pre>
+          <button onClick={()=>this.setState({error:null})} style={{marginTop:16,background:'#00c896',color:'#000',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontWeight:600}}>Reintentar</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 let isMobileGlobal=false;
 
 // ===================== LOADING SKELETON =====================
@@ -8643,7 +8662,7 @@ const AppLoader = () => (
   </div>
 );
 
-export default function App() {
+function App() {
   const [view,setView]=useState('dashboard');
   const [viewHint,setViewHint]=useState(null);
   const [data,setData]=useState(null);
@@ -8950,4 +8969,8 @@ self.addEventListener('fetch',e=>{
       <ToastContainer/>
     </div>
   );
+}
+
+export default function AppWithBoundary() {
+  return <ErrorBoundary><App /></ErrorBoundary>;
 }
