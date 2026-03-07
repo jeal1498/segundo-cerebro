@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
 
 // ===================== THEME =====================
 const T = {
@@ -220,6 +220,134 @@ const BalanceBarChart = ({months,height=90}) => {
           </div>
         );
       })}
+    </div>
+  );
+};
+
+// ===================== METRIC TREND CHART =====================
+const MetricTrendChart = ({data:pts,color,goal,unit,width=340,height=130}) => {
+  const [hoverIdx,setHoverIdx]=useState(null);
+  if(!pts||pts.length<2) return null;
+  const vals=pts.map(p=>p.value);
+  const minV=Math.min(...vals);
+  const maxV=Math.max(...vals,goal??-Infinity);
+  const range=maxV-minV||1;
+  const PAD={t:18,r:10,b:26,l:38};
+  const W=width-PAD.l-PAD.r;
+  const H=height-PAD.t-PAD.b;
+  const xS=i=>PAD.l+(i/(pts.length-1))*W;
+  const yS=v=>PAD.t+H-((v-minV)/range)*H;
+  const pathD=pts.map((p,i)=>`${i===0?'M':'L'} ${xS(i).toFixed(1)} ${yS(p.value).toFixed(1)}`).join(' ');
+  const fillD=`M ${xS(0).toFixed(1)} ${(PAD.t+H).toFixed(1)} ${pts.map((p,i)=>`L ${xS(i).toFixed(1)} ${yS(p.value).toFixed(1)}`).join(' ')} L ${xS(pts.length-1).toFixed(1)} ${(PAD.t+H).toFixed(1)} Z`;
+  const goalY=goal!=null?yS(Math.min(Math.max(goal,minV),maxV)):null;
+  const fmtV=v=>unit==='pasos'?Number(v).toLocaleString():Number(v).toFixed(unit==='h'?1:1);
+  const xLabels=[0,Math.floor((pts.length-1)/2),pts.length-1].map(i=>({i,x:xS(i),label:pts[i]?.date?.slice(5)||''}));
+  const yTicks=[minV,minV+(maxV-minV)/2,maxV];
+  const hover=hoverIdx!=null?pts[hoverIdx]:null;
+  return (
+    <div style={{position:'relative',width,userSelect:'none'}}>
+      <svg width={width} height={height} style={{overflow:'visible',display:'block'}}
+        onMouseLeave={()=>setHoverIdx(null)}>
+        {/* Area fill */}
+        <path d={fillD} fill={`${color}12`}/>
+        {/* Subtle grid lines */}
+        {yTicks.map((v,i)=>(
+          <line key={i} x1={PAD.l} y1={yS(v).toFixed(1)} x2={PAD.l+W} y2={yS(v).toFixed(1)}
+            stroke={T.border} strokeWidth="0.8" strokeDasharray="3 4"/>
+        ))}
+        {/* Goal line */}
+        {goalY!=null&&(
+          <>
+            <line x1={PAD.l} y1={goalY.toFixed(1)} x2={PAD.l+W} y2={goalY.toFixed(1)}
+              stroke={color} strokeWidth="1.2" strokeDasharray="5 3" opacity="0.55"/>
+            <text x={PAD.l+W} y={goalY-5} fill={color} fontSize="8" textAnchor="end" opacity="0.8" fontWeight="600">meta</text>
+          </>
+        )}
+        {/* Main line */}
+        <path d={pathD} fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+        {/* Data points + invisible hover rects */}
+        {pts.map((p,i)=>(
+          <g key={i}>
+            <circle cx={xS(i).toFixed(1)} cy={yS(p.value).toFixed(1)}
+              r={hoverIdx===i?5:i===pts.length-1?3.5:2}
+              fill={hoverIdx===i||i===pts.length-1?color:`${color}70`}
+              style={{transition:'r 0.1s'}}/>
+            <rect x={(xS(i)-10).toFixed(1)} y={PAD.t} width={20} height={H}
+              fill="transparent" style={{cursor:'crosshair'}}
+              onMouseEnter={()=>setHoverIdx(i)}/>
+          </g>
+        ))}
+        {/* Y-axis labels */}
+        {[{v:maxV,y:PAD.t+6},{v:minV,y:PAD.t+H+1}].map(({v,y},i)=>(
+          <text key={i} x={PAD.l-5} y={y} fill={T.dim} fontSize="8.5" textAnchor="end">{fmtV(v)}</text>
+        ))}
+        {/* X-axis labels */}
+        {xLabels.map(({x,label,i:idx})=>(
+          <text key={idx} x={x.toFixed(1)} y={height-4} fill={T.dim} fontSize="8.5" textAnchor="middle">{label}</text>
+        ))}
+      </svg>
+      {/* Hover tooltip */}
+      {hover&&hoverIdx!=null&&(
+        <div style={{
+          position:'absolute',
+          left:Math.min(xS(hoverIdx)+10,width-100),
+          top:Math.max(yS(hover.value)-42,0),
+          background:T.surface2,border:`1px solid ${color}50`,borderRadius:8,
+          padding:'5px 10px',pointerEvents:'none',fontSize:11,
+          boxShadow:'0 3px 14px rgba(0,0,0,0.45)',zIndex:10,whiteSpace:'nowrap',
+        }}>
+          <div style={{fontWeight:800,color,lineHeight:1.2}}>{fmtV(hover.value)} {unit}</div>
+          <div style={{color:T.muted,fontSize:9,marginTop:2}}>{hover.date}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ===================== HABIT WEEKLY BARS =====================
+const HabitWeeklyBars = ({habit,color}) => {
+  if((habit.frequency||'daily')!=='daily') return null;
+  const weeks=Array.from({length:4},(_,wi)=>{
+    const endDate=new Date();
+    endDate.setDate(endDate.getDate()-wi*7);
+    const days=Array.from({length:7},(_,di)=>{
+      const d=new Date(endDate);
+      d.setDate(endDate.getDate()-di);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    });
+    const done=days.filter(d=>habit.completions.includes(d)).length;
+    const pct=Math.round(done/7*100);
+    const endLabel=endDate.toLocaleDateString('es-ES',{month:'short',day:'numeric'});
+    return {done,pct,label:`Sem ${4-wi}`,endLabel};
+  }).reverse();
+
+  return (
+    <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${T.border}`}}>
+      <div style={{fontSize:10,color:T.muted,fontWeight:700,marginBottom:10,textTransform:'uppercase',letterSpacing:0.8}}>
+        Rendimiento por semana
+      </div>
+      <div style={{display:'flex',gap:6,alignItems:'flex-end',height:72}}>
+        {weeks.map((w,i)=>{
+          const barH=Math.max(Math.round(w.pct/100*46),w.pct>0?3:0);
+          const barColor=w.pct>=70?T.green:w.pct>=40?T.orange:w.pct>0?T.red:T.border;
+          const isCur=i===weeks.length-1;
+          return (
+            <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+              <div style={{fontSize:11,fontWeight:700,color:w.pct>0?barColor:T.dim,lineHeight:1}}>
+                {w.pct>0?`${w.pct}%`:'—'}
+              </div>
+              <div style={{
+                width:'100%',height:barH||3,borderRadius:'4px 4px 0 0',
+                background:barColor,opacity:isCur?1:0.7,
+                transition:'height 0.45s ease',
+              }}/>
+              <div style={{height:1,width:'100%',background:T.border}}/>
+              <div style={{fontSize:10,color:isCur?color:T.dim,fontWeight:isCur?700:400}}>{w.label}</div>
+              <div style={{fontSize:9,color:T.dim}}>{w.done}/7d</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -1159,11 +1287,13 @@ const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
   const del=(id)=>{const u=data.objectives.filter(o=>o.id!==id);setData(d=>({...d,objectives:u}));save('objectives',u);if(selected===id)setSelected(null);};
 
   // Milestones
-  const addMilestone=(objId,text)=>{
-    if(!text.trim())return;
-    const m={id:uid(),text,done:false,weight:20};
+  const [msForm,setMsForm]=useState({text:'',dueDate:'',weight:20});
+  const addMilestone=(objId)=>{
+    if(!msForm.text.trim())return;
+    const m={id:uid(),text:msForm.text,dueDate:msForm.dueDate||'',weight:Number(msForm.weight)||20,done:false};
     const u=data.objectives.map(o=>o.id!==objId?o:{...o,milestones:[...(o.milestones||[]),m]});
     setData(d=>({...d,objectives:u}));save('objectives',u);
+    setMsForm({text:'',dueDate:'',weight:20});
   };
   const toggleMilestone=(objId,msId)=>{
     const u=data.objectives.map(o=>o.id!==objId?o:{...o,milestones:(o.milestones||[]).map(m=>m.id!==msId?m:{...m,done:!m.done})});
@@ -1171,6 +1301,10 @@ const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
   };
   const delMilestone=(objId,msId)=>{
     const u=data.objectives.map(o=>o.id!==objId?o:{...o,milestones:(o.milestones||[]).filter(m=>m.id!==msId)});
+    setData(d=>({...d,objectives:u}));save('objectives',u);
+  };
+  const updateMilestone=(objId,msId,patch)=>{
+    const u=data.objectives.map(o=>o.id!==objId?o:{...o,milestones:(o.milestones||[]).map(m=>m.id!==msId?m:{...m,...patch})});
     setData(d=>({...d,objectives:u}));save('objectives',u);
   };
 
@@ -1186,8 +1320,10 @@ const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
   const getMsPct=(o)=>{
     const ms=o.milestones||[];
     if(!ms.length)return null;
-    const done=ms.filter(m=>m.done).length;
-    return Math.round(done/ms.length*100);
+    const totalWeight=ms.reduce((s,m)=>s+(m.weight||20),0);
+    if(!totalWeight)return Math.round(ms.filter(m=>m.done).length/ms.length*100);
+    const doneWeight=ms.filter(m=>m.done).reduce((s,m)=>s+(m.weight||20),0);
+    return Math.round(doneWeight/totalWeight*100);
   };
   const getTaskPct=(o)=>{
     const relProj=data.projects.filter(p=>p.objectiveId===o.id);
@@ -1202,7 +1338,6 @@ const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
   const daysLeft=(dl)=>Math.ceil((new Date(dl)-new Date())/86400000);
 
   const selObj=selected?data.objectives.find(o=>o.id===selected):null;
-  const [msInput,setMsInput]=useState('');
 
   return (
     <div>
@@ -1308,26 +1443,141 @@ const Objectives = ({data,setData,isMobile,viewHint,onConsumeHint,onNavigate}) =
                         <div style={{background:T.surface2,border:`1px solid ${T.border}`,borderTop:'none',borderRadius:'0 0 12px 12px',padding:'14px 16px'}}>
                           {/* Milestones */}
                           <div style={{marginBottom:14}}>
-                            <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:8}}>🏁 Milestones</div>
-                            {(o.milestones||[]).map(m=>(
-                              <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${T.border}`}}>
-                                <div onClick={()=>toggleMilestone(o.id,m.id)}
-                                  style={{width:17,height:17,borderRadius:4,border:`2px solid ${m.done?T.accent:T.border}`,background:m.done?T.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer',transition:'all 0.15s'}}>
-                                  {m.done&&<span style={{color:'#000',fontSize:9,fontWeight:900}}>✓</span>}
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                              <div style={{fontSize:12,fontWeight:700,color:T.text}}>🏁 Milestones</div>
+                              {(o.milestones||[]).length>0&&(()=>{
+                                const totalW=(o.milestones||[]).reduce((s,m)=>s+(m.weight||20),0);
+                                const isBalanced=Math.abs(totalW-100)<=2;
+                                return (
+                                  <span style={{fontSize:10,color:isBalanced?T.accent:T.orange,fontWeight:600,background:isBalanced?`${T.accent}15`:`${T.orange}15`,padding:'2px 8px',borderRadius:8}}>
+                                    {isBalanced?`✓ ${totalW}% balanceado`:`Σ ${totalW}% — ajustar pesos`}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+
+                            {(o.milestones||[]).map((m,mi)=>{
+                              const msOverdue=m.dueDate&&m.dueDate<today()&&!m.done;
+                              const msDue=m.dueDate?daysLeft(m.dueDate):null;
+                              return (
+                                <div key={m.id} style={{
+                                  display:'flex',alignItems:'flex-start',gap:8,
+                                  padding:'8px 10px',marginBottom:5,
+                                  background:m.done?`${T.accent}06`:T.bg,
+                                  borderRadius:9,
+                                  border:`1px solid ${msOverdue?T.red+'40':m.done?T.accent+'30':T.border}`,
+                                  transition:'all 0.15s',
+                                }}>
+                                  {/* Toggle */}
+                                  <button onClick={()=>toggleMilestone(o.id,m.id)}
+                                    style={{width:18,height:18,borderRadius:5,border:`2px solid ${m.done?T.accent:T.border}`,
+                                      background:m.done?T.accent:'transparent',cursor:'pointer',flexShrink:0,
+                                      display:'flex',alignItems:'center',justifyContent:'center',marginTop:1,transition:'all 0.15s'}}>
+                                    {m.done&&<span style={{color:'#000',fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
+                                  </button>
+
+                                  {/* Text + meta */}
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontSize:12,color:m.done?T.muted:T.text,textDecoration:m.done?'line-through':'none',lineHeight:1.4}}>{m.text}</div>
+                                    <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap',alignItems:'center'}}>
+                                      {/* Weight badge */}
+                                      <span style={{fontSize:10,fontWeight:700,
+                                        color:m.done?T.accent:T.blue,
+                                        background:m.done?`${T.accent}15`:`${T.blue}15`,
+                                        padding:'1px 7px',borderRadius:6,cursor:'pointer'}}
+                                        title="Click para editar peso"
+                                        onClick={()=>{
+                                          const v=window.prompt(`Peso de este milestone (1–100):`,m.weight||20);
+                                          if(v&&!isNaN(v))updateMilestone(o.id,m.id,{weight:Math.min(100,Math.max(1,Number(v)))});
+                                        }}>
+                                        {m.weight||20}%
+                                      </span>
+                                      {/* Due date */}
+                                      {m.dueDate?(
+                                        <span style={{fontSize:10,color:msOverdue?T.red:msDue&&msDue<=3?T.orange:T.muted,
+                                          fontWeight:msOverdue||msDue<=3?600:400,
+                                          background:msOverdue?`${T.red}12`:msDue<=3&&!m.done?`${T.orange}12`:'transparent',
+                                          padding:msOverdue||msDue<=3?'1px 6px':'0',borderRadius:5}}>
+                                          {msOverdue?`⚠️ Vencido ${fmt(m.dueDate)}`:msDue<=0?'📅 Hoy':msDue===1?'📅 Mañana':`📅 ${fmt(m.dueDate)}`}
+                                        </span>
+                                      ):(
+                                        <button onClick={()=>{
+                                          const v=window.prompt('Fecha límite (YYYY-MM-DD):',today());
+                                          if(v)updateMilestone(o.id,m.id,{dueDate:v});
+                                        }} style={{fontSize:10,color:T.dim,background:'none',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit'}}>
+                                          + fecha
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Delete */}
+                                  <button onClick={()=>delMilestone(o.id,m.id)}
+                                    style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2,flexShrink:0}}>
+                                    <Icon name="trash" size={10}/>
+                                  </button>
                                 </div>
-                                <span style={{flex:1,fontSize:12,color:m.done?T.muted:T.text,textDecoration:m.done?'line-through':'none'}}>{m.text}</span>
-                                <button onClick={()=>delMilestone(o.id,m.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2}}><Icon name="trash" size={10}/></button>
+                              );
+                            })}
+
+                            {/* Weighted progress bar */}
+                            {(o.milestones||[]).length>0&&(()=>{
+                              const ms=o.milestones||[];
+                              const totalW=ms.reduce((s,m)=>s+(m.weight||20),0)||1;
+                              let cumX=0;
+                              return (
+                                <div style={{marginTop:10,marginBottom:12}}>
+                                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                                    <span style={{fontSize:10,color:T.muted}}>Progreso ponderado</span>
+                                    <span style={{fontSize:11,fontWeight:700,color:T.accent}}>{getMsPct(o)}%</span>
+                                  </div>
+                                  {/* Segmented bar */}
+                                  <div style={{height:8,display:'flex',borderRadius:5,overflow:'hidden',gap:1,background:T.border}}>
+                                    {ms.map((m,i)=>{
+                                      const segW=(m.weight||20)/totalW*100;
+                                      return (
+                                        <div key={m.id} style={{
+                                          width:`${segW}%`,height:'100%',flexShrink:0,
+                                          background:m.done?T.accent:`${T.accent}25`,
+                                          transition:'background 0.3s',
+                                        }} title={`${m.text} (${m.weight||20}%)`}/>
+                                      );
+                                    })}
+                                  </div>
+                                  <div style={{display:'flex',gap:2,marginTop:3}}>
+                                    {ms.map(m=>(
+                                      <div key={m.id} style={{flex:`${m.weight||20}`,textAlign:'center',fontSize:8,color:m.done?T.accent:T.dim,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis',minWidth:0}} title={m.text}>
+                                        {m.text.slice(0,8)}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* Add milestone form */}
+                            <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:8,background:T.surface,border:`1px solid ${T.border}`,borderRadius:9,padding:'10px 12px'}}>
+                              <input value={msForm.text} onChange={e=>setMsForm(f=>({...f,text:e.target.value}))}
+                                onKeyDown={e=>{if(e.key==='Enter')addMilestone(o.id);}}
+                                placeholder="Nombre del milestone…"
+                                style={{background:'transparent',border:'none',borderBottom:`1px solid ${T.border}`,color:T.text,padding:'4px 0',fontSize:12,outline:'none',fontFamily:'inherit',width:'100%'}}/>
+                              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                                <div style={{flex:1}}>
+                                  <label style={{fontSize:9,color:T.muted,display:'block',marginBottom:3}}>Fecha límite</label>
+                                  <input type="date" value={msForm.dueDate} onChange={e=>setMsForm(f=>({...f,dueDate:e.target.value}))}
+                                    style={{width:'100%',background:T.bg,border:`1px solid ${T.border}`,color:T.muted,padding:'4px 8px',borderRadius:6,fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                                </div>
+                                <div style={{width:72}}>
+                                  <label style={{fontSize:9,color:T.muted,display:'block',marginBottom:3}}>Peso (%)</label>
+                                  <input type="number" min="1" max="100" value={msForm.weight} onChange={e=>setMsForm(f=>({...f,weight:e.target.value}))}
+                                    style={{width:'100%',background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'4px 8px',borderRadius:6,fontSize:11,outline:'none',fontFamily:'inherit',textAlign:'center'}}/>
+                                </div>
+                                <button onClick={()=>addMilestone(o.id)}
+                                  style={{marginTop:14,padding:'5px 14px',borderRadius:8,border:'none',background:T.accent,color:'#000',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit',flexShrink:0}}>+</button>
                               </div>
-                            ))}
-                            <div style={{display:'flex',gap:6,marginTop:8}}>
-                              <input value={msInput} onChange={e=>setMsInput(e.target.value)}
-                                onKeyDown={e=>{if(e.key==='Enter'){addMilestone(o.id,msInput);setMsInput('');}}}
-                                placeholder="Agregar milestone... (Enter)" 
-                                style={{flex:1,background:T.bg,border:`1px solid ${T.border}`,color:T.text,padding:'6px 10px',borderRadius:8,fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-                              <button onClick={()=>{addMilestone(o.id,msInput);setMsInput('');}}
-                                style={{padding:'6px 12px',borderRadius:8,border:'none',background:T.accent,color:'#000',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>+</button>
                             </div>
                           </div>
+
                           {/* Check-ins */}
                           {(o.checkins||[]).length>0&&(
                             <div>
@@ -1612,10 +1862,26 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint,onNaviga
     setData(d=>({...d,tasks:u}));save('tasks',u);
   };
 
-  // Bulk action
+  // Bulk actions
   const bulkMarkDone=()=>{
     const u=data.tasks.map(t=>selectedTasks.includes(t.id)?{...t,status:'done'}:t);
-    setData(d=>({...d,tasks:u}));save('tasks',u);setSelectedTasks([]);
+    setData(d=>({...d,tasks:u}));save('tasks',u);
+    toast.success(`✓ ${selectedTasks.length} tarea${selectedTasks.length!==1?'s':''} completada${selectedTasks.length!==1?'s':''}`);
+    setSelectedTasks([]);
+  };
+  const bulkMoveToStatus=(status)=>{
+    const u=data.tasks.map(t=>selectedTasks.includes(t.id)?{...t,status}:t);
+    setData(d=>({...d,tasks:u}));save('tasks',u);
+    const label=status==='todo'?'Pendiente':status==='in-progress'?'En progreso':'Completado';
+    toast.success(`→ ${selectedTasks.length} tarea${selectedTasks.length!==1?'s':''} movida${selectedTasks.length!==1?'s':''} a ${label}`);
+    setSelectedTasks([]);
+  };
+  const bulkDelete=()=>{
+    if(!window.confirm(`¿Eliminar ${selectedTasks.length} tarea${selectedTasks.length!==1?'s':''}? Esta acción no se puede deshacer.`))return;
+    const u=data.tasks.filter(t=>!selectedTasks.includes(t.id));
+    setData(d=>({...d,tasks:u}));save('tasks',u);
+    toast.info(`🗑 ${selectedTasks.length} tarea${selectedTasks.length!==1?'s':''} eliminada${selectedTasks.length!==1?'s':''}`);
+    setSelectedTasks([]);
   };
 
   // Kanban move
@@ -1652,6 +1918,9 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint,onNaviga
   const totalPTasks=pTasks.length;
   const donePTasks=pTasks.filter(t=>t.status==='done').length;
   const donePct=totalPTasks?Math.round(donePTasks/totalPTasks*100):0;
+  const allVisibleIds=filteredPTasks.map(t=>t.id);
+  const allSelected=allVisibleIds.length>0&&allVisibleIds.every(id=>selectedTasks.includes(id));
+  const toggleSelectAll=()=>setSelectedTasks(allSelected?[]:allVisibleIds);
 
   const TaskRow=({t,showKanbanMove})=>{
     const isExpanded=expandedTask===t.id;
@@ -1872,13 +2141,94 @@ const ProjectsAndTasks = ({data,setData,isMobile,viewHint,onConsumeHint,onNaviga
             ✕ Limpiar filtros
           </button>
         )}
-        {selectedTasks.length>0&&(
-          <button onClick={bulkMarkDone}
-            style={{marginLeft:'auto',padding:'4px 12px',borderRadius:8,border:`1px solid ${T.accent}`,background:`${T.accent}15`,color:T.accent,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>
-            ✓ Marcar {selectedTasks.length} como listas
+        {/* Select all toggle */}
+        {filteredPTasks.length>0&&(
+          <button onClick={toggleSelectAll}
+            style={{marginLeft:'auto',padding:'4px 10px',borderRadius:8,
+              border:`1px solid ${allSelected?T.accent:T.border}`,
+              background:allSelected?`${T.accent}15`:'transparent',
+              color:allSelected?T.accent:T.muted,
+              cursor:'pointer',fontSize:11,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
+            <span style={{width:13,height:13,borderRadius:3,border:`1.5px solid ${allSelected?T.accent:T.muted}`,
+              background:allSelected?T.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              {allSelected&&<span style={{color:'#000',fontSize:9,fontWeight:900,lineHeight:1}}>✓</span>}
+            </span>
+            {allSelected?'Deseleccionar todo':'Seleccionar todo'}
           </button>
         )}
       </div>
+      {/* BULK ACTION BAR — floats above bottom nav when tasks are selected */}
+      {selectedTasks.length>0&&(
+        <div style={{
+          position:'sticky', bottom: isMobile ? 80 : 16,
+          zIndex:40, margin:'16px 0 0',
+          background:T.surface2,
+          border:`1.5px solid ${T.accent}60`,
+          borderRadius:14,
+          padding:'10px 14px',
+          display:'flex', alignItems:'center', gap:8, flexWrap:'wrap',
+          boxShadow:`0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px ${T.accent}20`,
+          animation:'slideIn 0.18s ease',
+        }}>
+          {/* Count pill */}
+          <div style={{
+            background:`${T.accent}20`, border:`1px solid ${T.accent}40`,
+            borderRadius:20, padding:'3px 12px',
+            fontSize:12, fontWeight:800, color:T.accent, flexShrink:0,
+          }}>
+            {selectedTasks.length} seleccionada{selectedTasks.length!==1?'s':''}
+          </div>
+
+          <div style={{display:'flex',gap:6,flex:1,flexWrap:'wrap'}}>
+            {/* Mark done */}
+            <button onClick={bulkMarkDone} style={{
+              padding:'5px 12px', borderRadius:9,
+              border:`1px solid ${T.green}60`, background:`${T.green}15`,
+              color:T.green, cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:'inherit',
+              display:'flex', alignItems:'center', gap:5,
+            }}>
+              <span style={{fontSize:13}}>✓</span> Completar
+            </button>
+
+            {/* Move to in-progress */}
+            <button onClick={()=>bulkMoveToStatus('in-progress')} style={{
+              padding:'5px 12px', borderRadius:9,
+              border:`1px solid ${T.blue}60`, background:`${T.blue}15`,
+              color:T.blue, cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:'inherit',
+              display:'flex', alignItems:'center', gap:5,
+            }}>
+              <span style={{fontSize:13}}>▶</span> En progreso
+            </button>
+
+            {/* Move to pending */}
+            <button onClick={()=>bulkMoveToStatus('todo')} style={{
+              padding:'5px 12px', borderRadius:9,
+              border:`1px solid ${T.muted}40`, background:`${T.muted}10`,
+              color:T.muted, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit',
+              display:'flex', alignItems:'center', gap:5,
+            }}>
+              ↩ Pendiente
+            </button>
+
+            {/* Delete */}
+            <button onClick={bulkDelete} style={{
+              padding:'5px 12px', borderRadius:9,
+              border:`1px solid ${T.red}50`, background:`${T.red}12`,
+              color:T.red, cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:'inherit',
+              display:'flex', alignItems:'center', gap:5,
+            }}>
+              <span style={{fontSize:13}}>🗑</span> Eliminar
+            </button>
+          </div>
+
+          {/* Dismiss */}
+          <button onClick={()=>setSelectedTasks([])} style={{
+            background:'none', border:`1px solid ${T.border}`,
+            borderRadius:8, padding:'4px 8px',
+            color:T.dim, cursor:'pointer', fontSize:13, flexShrink:0,
+          }} title="Deseleccionar todo">✕</button>
+        </div>
+      )}
       {/* Active filters summary */}
       {(filterPriority!=='all'||filterArea!=='all'||filterDeadline!=='all')&&(
         <div style={{fontSize:11,color:T.dim,marginBottom:8}}>
@@ -2878,6 +3228,9 @@ const HabitTracker = ({data,setData,isMobile}) => {
 
                   {/* Heatmap */}
                   <HabitHeatmap completions={h.completions} color={color}/>
+
+                  {/* Weekly performance bars */}
+                  <HabitWeeklyBars habit={h} color={color}/>
 
                   {/* Stat pills */}
                   <div style={{display:'flex',gap:8,marginTop:12}}>
@@ -5033,6 +5386,7 @@ const TrabajoEmbed = ({isMobile,onBack}) => {
 // ===================== SIDE PROJECTS =====================
 const SideProjects = ({data,setData,isMobile,onBack}) => {
   const [tab,setTab]             = useState('proyectos');
+  const [roadmapHover,setRoadmapHover] = useState(null);
   const [modalProj,setModalProj] = useState(false);
   const [modalTask,setModalTask] = useState(false);
   const [modalMile,setModalMile] = useState(false);
@@ -5184,7 +5538,7 @@ const SideProjects = ({data,setData,isMobile,onBack}) => {
 
       {/* Tabs */}
       <div style={{display:'flex',gap:8,padding:'0 20px 16px',flexWrap:'wrap'}}>
-        {[{id:'proyectos',label:'🗂️ Proyectos'},{id:'tareas',label:'✅ Tareas'},{id:'hitos',label:'🏆 Hitos'},{id:'tiempo',label:'⏱️ Tiempo'}].map(t=>(
+        {[{id:'proyectos',label:'🗂️ Proyectos'},{id:'tareas',label:'✅ Tareas'},{id:'hitos',label:'🏆 Hitos'},{id:'tiempo',label:'⏱️ Tiempo'},{id:'roadmap',label:'🗺️ Roadmap'}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             style={{padding:'7px 16px',borderRadius:10,border:`1px solid ${tab===t.id?T.accent:T.border}`,background:tab===t.id?`${T.accent}18`:'transparent',color:tab===t.id?T.accent:T.muted,cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>
             {t.label}
@@ -5444,6 +5798,192 @@ const SideProjects = ({data,setData,isMobile,onBack}) => {
         </div>
       )}
 
+      {/* ══════════ ROADMAP ══════════ */}
+      {tab==='roadmap'&&(
+        <div>
+          {sideProjects.length===0
+            ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
+               <div style={{fontSize:36,marginBottom:8}}>🗺️</div>
+               <div style={{fontSize:14,marginBottom:12}}>Sin proyectos para mostrar</div>
+               <Btn size="sm" onClick={()=>setModalProj(true)}><Icon name="plus" size={13}/>Crear proyecto</Btn>
+             </div>
+            :(()=>{
+              // Build date range: from earliest startDate to today+1mo
+              const allDates=[...sideProjects.map(p=>p.startDate).filter(Boolean),...milestones.map(m=>m.date).filter(Boolean)];
+              const minDate=allDates.sort()[0]||today().slice(0,7)+'-01';
+              const maxDateRaw=new Date(); maxDateRaw.setMonth(maxDateRaw.getMonth()+1);
+              const maxDate=maxDateRaw.toISOString().slice(0,10);
+
+              const msToNum=(d)=>new Date(d+'T00:00:00').getTime();
+              const rangeMs=msToNum(maxDate)-msToNum(minDate)||1;
+              const pct=(d)=>Math.max(0,Math.min(100,(msToNum(d)-msToNum(minDate))/rangeMs*100));
+
+              // Build month axis labels
+              const months=[];
+              const cur=new Date(minDate+'T00:00:00');
+              const end=new Date(maxDate+'T00:00:00');
+              while(cur<=end){
+                months.push({label:cur.toLocaleDateString('es-ES',{month:'short',year:'2-digit'}),pct:pct(cur.toISOString().slice(0,10))});
+                cur.setMonth(cur.getMonth()+1);
+              }
+
+              const todayPct=pct(today());
+              const STATUS_COLORS={idea:T.muted,progress:T.accent,paused:T.orange,launched:T.green,archived:T.dim};
+
+              return (
+                <div>
+                  {/* Legend */}
+                  <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap'}}>
+                    {Object.entries({idea:'💡 Idea',progress:'⚡ En progreso',paused:'⏸️ Pausado',launched:'🚀 Lanzado',archived:'📦 Archivado'}).map(([k,v])=>(
+                      <div key={k} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:T.muted}}>
+                        <div style={{width:12,height:4,borderRadius:2,background:STATUS_COLORS[k]}}/>
+                        {v}
+                      </div>
+                    ))}
+                    <div style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:T.muted}}>
+                      <div style={{width:8,height:8,borderRadius:'50%',background:T.yellow}}/>
+                      Milestone
+                    </div>
+                  </div>
+
+                  {/* Chart */}
+                  <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,overflow:'hidden'}}>
+
+                    {/* Month axis header */}
+                    <div style={{position:'relative',height:28,borderBottom:`1px solid ${T.border}`,marginLeft:isMobile?100:140}}>
+                      {months.map((m,i)=>(
+                        <div key={i} style={{position:'absolute',left:`${m.pct}%`,top:0,bottom:0,display:'flex',alignItems:'center'}}>
+                          <div style={{width:1,height:'100%',background:T.border,position:'absolute'}}/>
+                          <span style={{fontSize:9,color:T.dim,position:'absolute',left:3,whiteSpace:'nowrap'}}>{m.label}</span>
+                        </div>
+                      ))}
+                      {/* Today line header */}
+                      <div style={{position:'absolute',left:`${todayPct}%`,top:0,bottom:0,borderLeft:`2px dashed ${T.accent}60`}}/>
+                    </div>
+
+                    {/* Project rows */}
+                    {[...sideProjects].sort((a,b)=>(a.startDate||'9999').localeCompare(b.startDate||'9999')).map((p,pi)=>{
+                      const color=p.color||STATUS_COLORS[p.status]||T.accent;
+                      const start=p.startDate||today();
+                      const end=p.status==='launched'&&p.launchDate?p.launchDate:today();
+                      const startPct=pct(start);
+                      const endPct=Math.max(startPct+1,pct(end));
+                      const pMiles=milestones.filter(m=>m.projectId===p.id);
+                      const isHov=roadmapHover===p.id;
+
+                      return (
+                        <div key={p.id}
+                          style={{display:'flex',alignItems:'center',minHeight:44,borderBottom:pi<sideProjects.length-1?`1px solid ${T.border}`:'none',background:isHov?`${T.accent}05`:'transparent',transition:'background 0.15s',cursor:'pointer'}}
+                          onClick={()=>setSelProj(selProj?.id===p.id?null:p)}
+                          onMouseEnter={()=>setRoadmapHover(p.id)}
+                          onMouseLeave={()=>setRoadmapHover(null)}>
+
+                          {/* Project name */}
+                          <div style={{width:isMobile?100:140,flexShrink:0,padding:'0 12px',display:'flex',alignItems:'center',gap:8,borderRight:`1px solid ${T.border}`}}>
+                            <div style={{width:8,height:8,borderRadius:'50%',background:color,flexShrink:0}}/>
+                            <span style={{fontSize:isMobile?10:12,color:T.text,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{p.name}</span>
+                          </div>
+
+                          {/* Bar area */}
+                          <div style={{flex:1,position:'relative',height:44}}>
+                            {/* Grid lines */}
+                            {months.map((m,i)=>(
+                              <div key={i} style={{position:'absolute',left:`${m.pct}%`,top:0,bottom:0,width:1,background:`${T.border}60`}}/>
+                            ))}
+                            {/* Today dashed line */}
+                            <div style={{position:'absolute',left:`${todayPct}%`,top:0,bottom:0,borderLeft:`2px dashed ${T.accent}50`,zIndex:1}}/>
+
+                            {/* Project bar */}
+                            <div
+                              style={{
+                                position:'absolute',
+                                left:`${startPct}%`,
+                                width:`${Math.max(1,endPct-startPct)}%`,
+                                top:'50%',transform:'translateY(-50%)',
+                                height:isHov?20:16,borderRadius:5,
+                                background:color,
+                                opacity:p.status==='archived'?0.4:0.85,
+                                zIndex:2,transition:'height 0.15s',
+                              }}
+                              title={`${p.name} · ${start} → ${end}`}/>
+
+                            {/* Milestone dots */}
+                            {pMiles.map(m=>{
+                              const mp=pct(m.date);
+                              return (
+                                <div key={m.id}
+                                  title={`${m.title} · ${m.date}`}
+                                  style={{
+                                    position:'absolute',left:`${mp}%`,
+                                    top:'50%',transform:'translate(-50%,-50%)',
+                                    width:10,height:10,borderRadius:'50%',
+                                    background:m.done?T.yellow:T.surface,
+                                    border:`2px solid ${T.yellow}`,
+                                    zIndex:3,cursor:'default',
+                                    boxShadow:m.done?`0 0 6px ${T.yellow}60`:'none',
+                                  }}/>
+                              );
+                            })}
+
+                            {/* Status badge at end of bar */}
+                            {!isMobile&&(
+                              <div style={{
+                                position:'absolute',left:`${endPct}%`,
+                                top:'50%',transform:'translateY(-50%)',
+                                marginLeft:4,zIndex:3,
+                                fontSize:10,color:color,fontWeight:600,whiteSpace:'nowrap',
+                              }}>
+                                {statusInfo(p.status).emoji}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected project detail */}
+                  {selProj&&(
+                    <Card style={{marginTop:14,borderLeft:`3px solid ${selProj.color||T.accent}`}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                        <div>
+                          <div style={{color:T.text,fontWeight:700,fontSize:15}}>{selProj.name}</div>
+                          <div style={{color:T.muted,fontSize:12,marginTop:3,display:'flex',gap:10,flexWrap:'wrap'}}>
+                            {selProj.startDate&&<span>🗓 Inicio: {fmtDate(selProj.startDate)}</span>}
+                            {selProj.stack&&<span>🛠 {selProj.stack}</span>}
+                            <span style={{color:STATUS_COLORS[selProj.status],fontWeight:600}}>{statusInfo(selProj.status).emoji} {statusInfo(selProj.status).label}</span>
+                          </div>
+                        </div>
+                        <button onClick={()=>setSelProj(null)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',fontSize:16,padding:2}}>✕</button>
+                      </div>
+                      {selProj.description&&<div style={{color:T.muted,fontSize:12,lineHeight:1.6,marginBottom:8}}>{selProj.description}</div>}
+                      {milestones.filter(m=>m.projectId===selProj.id).length>0&&(
+                        <div>
+                          <div style={{fontSize:11,fontWeight:600,color:T.muted,marginBottom:6,textTransform:'uppercase',letterSpacing:0.5}}>Milestones</div>
+                          {[...milestones.filter(m=>m.projectId===selProj.id)].sort((a,b)=>a.date.localeCompare(b.date)).map(m=>(
+                            <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderBottom:`1px solid ${T.border}`}}>
+                              <div style={{width:8,height:8,borderRadius:'50%',background:m.done?T.yellow:T.dim,flexShrink:0}}/>
+                              <span style={{flex:1,fontSize:12,color:m.done?T.muted:T.text,textDecoration:m.done?'line-through':'none'}}>{m.title}</span>
+                              <span style={{fontSize:10,color:T.dim}}>{fmtDate(m.date)}</span>
+                              {m.done&&<span style={{fontSize:10,color:T.yellow}}>✓</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{display:'flex',gap:8,marginTop:12}}>
+                        <Btn size="sm" onClick={()=>openEditProj(selProj)}>✏️ Editar</Btn>
+                        {selProj.url&&<a href={selProj.url} target="_blank" rel="noreferrer" style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:`${T.green}15`,border:`1px solid ${T.green}30`,borderRadius:8,color:T.green,fontSize:11,fontWeight:600,textDecoration:'none'}}>🔗 Ver</a>}
+                        <Btn size="sm" variant="ghost" onClick={()=>{setMileForm({projectId:selProj.id,title:'',date:today(),notes:''});setModalMile(true);}}>🏆 Hito</Btn>
+                      </div>
+                    </Card>
+                  )}
+                </div>
+              );
+            })()
+          }
+        </div>
+      )}
+
       </div>{/* end padding wrapper */}
 
       {/* ══════════ MODALES ══════════ */}
@@ -5564,6 +6104,8 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
   const [interForm,setInterForm]       = useState({personId:'',type:'Mensaje',notes:'',date:today()});
   const [personSearch,setPersonSearch] = useState('');
   const [relationFilter,setRelationFilter] = useState('todas');
+  const [tlPersonFilter,setTlPersonFilter] = useState('all');
+  const [tlTypeFilter,setTlTypeFilter]     = useState('all');
 
   const people       = data.people||[];
   const followUps    = data.followUps||[];
@@ -5790,12 +6332,23 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
                 )}
                 {personInters.length>0&&(
                   <div>
-                    <div style={{fontSize:11,fontWeight:600,color:T.muted,marginBottom:6}}>Últimos contactos</div>
-                    {personInters.map(i=>(
-                      <div key={i.id} style={{fontSize:12,color:T.muted,padding:'4px 0',borderBottom:`1px solid ${T.border}`}}>
-                        <span style={{color:T.accent,marginRight:6}}>{i.type}</span>{i.notes&&<span style={{marginRight:6}}>{i.notes}</span>}<span style={{color:T.dim}}>{fmtDate(i.date)}</span>
-                      </div>
-                    ))}
+                    <div style={{fontSize:11,fontWeight:600,color:T.muted,marginBottom:8,textTransform:'uppercase',letterSpacing:0.5}}>Últimos contactos</div>
+                    <div style={{position:'relative',paddingLeft:28}}>
+                      <div style={{position:'absolute',left:8,top:4,bottom:4,width:1.5,background:T.border,borderRadius:2}}/>
+                      {personInters.map((i,idx)=>{
+                        const TYPE_ICONS={'Mensaje':'💬','Llamada':'📞','Videollamada':'🎥','Comida':'🍽️','Café':'☕','Evento':'🎉','Email':'✉️','Visita':'🏠','Otro':'📌'};
+                        return (
+                          <div key={i.id} style={{position:'relative',marginBottom:idx===personInters.length-1?0:8}}>
+                            <div style={{position:'absolute',left:-24,top:2,width:16,height:16,borderRadius:'50%',background:T.surface,border:`1.5px solid ${T.purple}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9}}>{TYPE_ICONS[i.type]||'•'}</div>
+                            <div style={{fontSize:12,color:T.muted,lineHeight:1.4}}>
+                              <span style={{color:T.accent,fontWeight:600,marginRight:5}}>{i.type}</span>
+                              {i.notes&&<span style={{marginRight:6}}>{i.notes}</span>}
+                              <span style={{color:T.dim,fontSize:10}}>{fmtDate(i.date)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </Card>
@@ -5926,31 +6479,116 @@ const Relaciones = ({data,setData,isMobile,onBack}) => {
         </div>
       )}
 
-      {/* ══════════ HISTORIAL ══════════ */}
+      {/* ══════════ HISTORIAL (TIMELINE) ══════════ */}
       {tab==='historial'&&(
         <div>
+          {/* Filters */}
+          {interactions.length>0&&(
+            <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
+              <select value={tlPersonFilter} onChange={e=>setTlPersonFilter(e.target.value)}
+                style={{background:T.surface2,border:`1px solid ${tlPersonFilter!=='all'?T.accent:T.border}`,color:tlPersonFilter!=='all'?T.accent:T.muted,padding:'6px 10px',borderRadius:9,fontSize:12,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+                <option value="all">Todas las personas</option>
+                {people.map(p=><option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+              </select>
+              <select value={tlTypeFilter} onChange={e=>setTlTypeFilter(e.target.value)}
+                style={{background:T.surface2,border:`1px solid ${tlTypeFilter!=='all'?T.accent:T.border}`,color:tlTypeFilter!=='all'?T.accent:T.muted,padding:'6px 10px',borderRadius:9,fontSize:12,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+                <option value="all">Todos los tipos</option>
+                {INTER_TYPES.map(t=><option key={t}>{t}</option>)}
+              </select>
+              {(tlPersonFilter!=='all'||tlTypeFilter!=='all')&&(
+                <button onClick={()=>{setTlPersonFilter('all');setTlTypeFilter('all');}}
+                  style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+                  ✕ Limpiar
+                </button>
+              )}
+            </div>
+          )}
+
           {interactions.length===0
             ?<div style={{textAlign:'center',padding:'40px 0',color:T.dim}}>
                <div style={{fontSize:36,marginBottom:8}}>💬</div>
                <div style={{fontSize:14,marginBottom:12}}>Sin interacciones registradas</div>
                <Btn size="sm" onClick={()=>setModalInteraction(true)}><Icon name="plus" size={13}/>Registrar</Btn>
              </div>
-            :[...interactions].sort((a,b)=>b.date.localeCompare(a.date)).map(i=>(
-              <div key={i.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:11,marginBottom:8,borderLeft:`3px solid ${T.purple}`}}>
-                <div style={{width:36,height:36,borderRadius:10,background:`${T.purple}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>
-                  {personEmoji(i.personId)}
-                </div>
-                <div style={{flex:1}}>
-                  <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-                    <span style={{color:T.text,fontSize:13,fontWeight:600}}>{personName(i.personId)}</span>
-                    <span style={{fontSize:11,color:T.purple,background:`${T.purple}15`,padding:'2px 8px',borderRadius:8}}>{i.type}</span>
+            :(()=>{
+              const TYPE_ICONS={'Mensaje':'💬','Llamada':'📞','Videollamada':'🎥','Comida':'🍽️','Café':'☕','Evento':'🎉','Email':'✉️','Visita':'🏠','Otro':'📌'};
+              const filtered=[...interactions]
+                .filter(i=>(tlPersonFilter==='all'||i.personId===tlPersonFilter)&&(tlTypeFilter==='all'||i.type===tlTypeFilter))
+                .sort((a,b)=>b.date.localeCompare(a.date));
+              if(!filtered.length) return <div style={{textAlign:'center',padding:'28px 0',color:T.dim,fontSize:13}}>Sin interacciones con estos filtros</div>;
+
+              // Group by month
+              const byMonth={};
+              filtered.forEach(i=>{
+                const key=i.date.slice(0,7);
+                if(!byMonth[key])byMonth[key]=[];
+                byMonth[key].push(i);
+              });
+
+              return Object.entries(byMonth).map(([month,items])=>(
+                <div key={month} style={{marginBottom:28}}>
+                  {/* Month header */}
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+                    <span style={{fontSize:12,fontWeight:700,color:T.muted,textTransform:'uppercase',letterSpacing:1,whiteSpace:'nowrap'}}>
+                      {new Date(month+'-01').toLocaleDateString('es-ES',{month:'long',year:'numeric'})}
+                    </span>
+                    <div style={{flex:1,height:1,background:T.border}}/>
+                    <span style={{fontSize:11,color:T.dim,whiteSpace:'nowrap'}}>{items.length} contacto{items.length!==1?'s':''}</span>
                   </div>
-                  {i.notes&&<div style={{color:T.muted,fontSize:12,marginTop:3}}>{i.notes}</div>}
-                  <div style={{color:T.dim,fontSize:11,marginTop:3}}>{fmtDate(i.date)}</div>
+
+                  {/* Timeline entries */}
+                  <div style={{position:'relative',paddingLeft:44}}>
+                    {/* Vertical line */}
+                    <div style={{position:'absolute',left:16,top:8,bottom:8,width:2,background:`${T.border}`,borderRadius:2}}/>
+
+                    {items.map((i,idx)=>{
+                      const person=people.find(p=>p.id===i.personId);
+                      const typeIcon=TYPE_ICONS[i.type]||'📌';
+                      const isLast=idx===items.length-1;
+                      return (
+                        <div key={i.id} style={{position:'relative',marginBottom:isLast?0:14}}>
+                          {/* Node dot */}
+                          <div style={{
+                            position:'absolute',left:-36,top:6,
+                            width:22,height:22,borderRadius:'50%',
+                            background:T.surface2,border:`2px solid ${T.purple}`,
+                            display:'flex',alignItems:'center',justifyContent:'center',
+                            fontSize:11,zIndex:1,
+                          }}>
+                            {typeIcon}
+                          </div>
+
+                          {/* Card */}
+                          <div style={{
+                            background:T.surface,border:`1px solid ${T.border}`,
+                            borderRadius:11,padding:'10px 14px',
+                            transition:'border-color 0.15s',
+                          }}
+                          onMouseEnter={e=>e.currentTarget.style.borderColor=T.purple}
+                          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:i.notes?4:0}}>
+                                  <span style={{fontSize:16,flexShrink:0}}>{person?.emoji||'👤'}</span>
+                                  <span style={{color:T.text,fontSize:13,fontWeight:600}}>{person?.name||'—'}</span>
+                                  <span style={{fontSize:11,color:T.purple,background:`${T.purple}15`,padding:'2px 8px',borderRadius:8,fontWeight:600}}>{i.type}</span>
+                                  <span style={{fontSize:11,color:T.dim,marginLeft:'auto'}}>{new Date(i.date+'T12:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short'})}</span>
+                                </div>
+                                {i.notes&&<div style={{color:T.muted,fontSize:12,lineHeight:1.5,paddingLeft:24}}>{i.notes}</div>}
+                              </div>
+                              <button onClick={()=>delInteraction(i.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:2,flexShrink:0,opacity:0.6}}
+                                onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=0.6}>
+                                <Icon name="trash" size={12}/>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <button onClick={()=>delInteraction(i.id)} style={{background:'none',border:'none',color:T.dim,cursor:'pointer',padding:4,display:'flex',flexShrink:0}}><Icon name="trash" size={13}/></button>
-              </div>
-            ))
+              ));
+            })()
           }
         </div>
       )}
@@ -7181,9 +7819,16 @@ const Health = ({data,setData,isMobile,onBack}) => {
                   <div style={{fontSize:13,fontWeight:700,color:goalColor,marginTop:2}}>{cfg.lowerBetter?goalPct<=100?'✓ Dentro de meta':'Por encima':goalPct+'% de meta'}</div>
                 </div>
               </div>
-              <Sparkline data={mData.slice(-14)} color={cfg.color} width={isMobile?280:340} height={60} filled/>
+              <MetricTrendChart
+                data={mData.slice(-30)}
+                color={cfg.color}
+                goal={cfg.goal}
+                unit={cfg.unit}
+                width={isMobile?Math.min(window.innerWidth-80,340):420}
+                height={140}
+              />
               <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
-                <span style={{fontSize:9,color:T.dim}}>{mData.slice(-14)[0]?.date?.slice(5)}</span>
+                <span style={{fontSize:9,color:T.dim}}>{mData.slice(-30)[0]?.date?.slice(5)}</span>
                 <span style={{fontSize:9,color:T.dim}}>{mData[mData.length-1]?.date?.slice(5)}</span>
               </div>
               <div style={{marginTop:12}}>
@@ -7975,6 +8620,35 @@ const ToastContainer=()=>{
 };
 let isMobileGlobal=false;
 
+// ===================== LOADING SKELETON =====================
+const AppLoader = () => (
+  <div style={{
+    display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+    height:'100dvh', width:'100%', background:T.bg, gap:20,
+    fontFamily:"'DM Sans',system-ui,sans-serif"
+  }}>
+    <div style={{
+      width:52, height:52, borderRadius:14,
+      background:`linear-gradient(135deg,${T.accent},${T.orange})`,
+      display:'flex', alignItems:'center', justifyContent:'center',
+      fontSize:30, animation:'sbPulse 1.4s ease-in-out infinite'
+    }}>🧠</div>
+    <div style={{display:'flex', flexDirection:'column', gap:10, alignItems:'center'}}>
+      {[160,120,140].map((w,i)=>(
+        <div key={i} style={{
+          width:w, height:10, borderRadius:6,
+          background:`linear-gradient(90deg,${T.surface} 25%,${T.surface2} 50%,${T.surface} 75%)`,
+          backgroundSize:'200% 100%',
+          animation:`sbShimmer 1.4s ease-in-out ${i*0.15}s infinite`
+        }}/>
+      ))}
+    </div>
+    <style>{`
+      @keyframes sbPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(0.95)}}
+      @keyframes sbShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    `}</style>
+  </div>
+);
 
 export default function App() {
   const [view,setView]=useState('dashboard');
@@ -7989,19 +8663,88 @@ export default function App() {
   const isMobile=useIsMobile();
   isMobileGlobal=isMobile;
 
-  // ── Emoji favicon ──
+  // ── Emoji favicon + PWA manifest ──
   useEffect(()=>{
+    // Favicon
     const canvas=document.createElement('canvas');
     canvas.width=64; canvas.height=64;
     const ctx=canvas.getContext('2d');
-    ctx.font='52px serif';
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
+    ctx.font='52px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('🧠',32,36);
     const link=document.querySelector("link[rel~='icon']")||document.createElement('link');
     link.rel='icon'; link.href=canvas.toDataURL();
     document.head.appendChild(link);
     document.title='Segundo Cerebro';
+
+    // PWA Web App Manifest (injected dynamically so no separate file needed)
+    if(!document.querySelector('link[rel="manifest"]')){
+      const manifest={
+        name:'Segundo Cerebro',
+        short_name:'2do Cerebro',
+        description:'Tu sistema de productividad personal — Método Tiago Forte',
+        start_url:'/',
+        display:'standalone',
+        background_color:'#090e13',
+        theme_color:'#090e13',
+        orientation:'portrait-primary',
+        icons:[
+          {src:canvas.toDataURL(),sizes:'64x64',type:'image/png'},
+        ],
+        categories:['productivity','lifestyle'],
+        lang:'es',
+      };
+      const blob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
+      const manifestUrl=URL.createObjectURL(blob);
+      const mLink=document.createElement('link');
+      mLink.rel='manifest'; mLink.href=manifestUrl;
+      document.head.appendChild(mLink);
+      // Theme color meta
+      const tc=document.querySelector('meta[name="theme-color"]')||document.createElement('meta');
+      tc.name='theme-color'; tc.content='#090e13';
+      document.head.appendChild(tc);
+      // Apple mobile web app meta
+      const apple=document.querySelector('meta[name="apple-mobile-web-app-capable"]')||document.createElement('meta');
+      apple.name='apple-mobile-web-app-capable'; apple.content='yes';
+      document.head.appendChild(apple);
+    }
+
+    // Service Worker — offline-first, cache-then-network strategy
+    if('serviceWorker' in navigator){
+      const swCode=`
+const CACHE='sb-v1';
+const CORE=['/','/index.html'];
+self.addEventListener('install',e=>{
+  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()));
+});
+self.addEventListener('activate',e=>{
+  e.waitUntil(caches.keys().then(keys=>
+    Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))
+  ).then(()=>self.clients.claim()));
+});
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET') return;
+  if(e.request.url.includes('fonts.googleapis')||e.request.url.includes('fonts.gstatic')){
+    e.respondWith(caches.open(CACHE).then(c=>c.match(e.request).then(cached=>{
+      if(cached) return cached;
+      return fetch(e.request).then(r=>{c.put(e.request,r.clone());return r;}).catch(()=>new Response('',{status:408}));
+    })));
+    return;
+  }
+  e.respondWith(
+    fetch(e.request)
+      .then(r=>{
+        if(r.ok){const cl=r.clone();caches.open(CACHE).then(c=>c.put(e.request,cl));}
+        return r;
+      })
+      .catch(()=>caches.match(e.request).then(c=>c||new Response('Offline',{status:503})))
+  );
+});
+      `;
+      const swBlob=new Blob([swCode],{type:'text/javascript'});
+      const swUrl=URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swUrl,{scope:'/'})
+        .catch(()=>{}); // fails gracefully in cross-origin / sandboxed envs
+    }
   },[]);
 
   // Cmd+K global search
@@ -8045,31 +8788,44 @@ export default function App() {
     })();
   },[]);
 
-  if(!data) return null; // Loading screen disabled
+  if(!data) return <AppLoader/>;
 
   const inboxCount=data.inbox.filter(i=>!i.processed).length;
   const props={data,setData,isMobile};
-  const views={
-    dashboard:<Dashboard {...props} onNavigate={navigate}/>,
-    areas:<Areas data={data} isMobile={isMobile} onNavigate={navigate}/>,
-    areaDetail:<AreaDetail {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate} onBack={()=>navTo('areas')}/>,
-    objectives:<Objectives {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
-    projects:<ProjectsAndTasks {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)} onNavigate={navigate}/>,
-    notes:<Notes {...props} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
-    finance:<Finance {...props} onBack={()=>navTo('dashboard')}/>,
-    inbox:<Inbox {...props}/>,
-    habits:<HabitTracker {...props}/>,
-    journal:<Journal {...props}/>,
-    books:<Books {...props}/>,
-    shopping:<Shopping {...props}/>,
-    education:<Education {...props}/>,
-    health:<Health {...props} onBack={()=>navTo('dashboard')}/>,
-    relaciones:<Relaciones {...props} onBack={()=>navTo('dashboard')}/>,
-    sideprojects:<SideProjects {...props} onBack={()=>navTo('dashboard')}/>,
-    desarrollo:<DesarrolloPersonal {...props} onBack={()=>navTo('dashboard')}/>,
-    hogar:<Hogar {...props} onBack={()=>navTo('dashboard')}/>,
-    settings:<Settings apiKey={apiKey} setApiKey={setApiKey} isMobile={isMobile} data={data} setData={setData} viewHint={viewHint} onConsumeHint={()=>setViewHint(null)}/>,
-  };
+
+  // ── Lazy view renderer: only instantiates the active view ──
+  // This prevents creating 18+ React elements on every render tick.
+  const activeView = useMemo(()=>{
+    const p=props;
+    const back=()=>navTo('dashboard');
+    const consumeHint=()=>setViewHint(null);
+    switch(view){
+      case 'dashboard':    return <Dashboard {...p} onNavigate={navigate}/>;
+      case 'areas':        return <Areas data={data} isMobile={isMobile} onNavigate={navigate}/>;
+      case 'areaDetail':   return <AreaDetail {...p} viewHint={viewHint} onConsumeHint={consumeHint} onNavigate={navigate} onBack={()=>navTo('areas')}/>;
+      case 'objectives':   return <Objectives {...p} viewHint={viewHint} onConsumeHint={consumeHint} onNavigate={navigate}/>;
+      case 'projects':     return <ProjectsAndTasks {...p} viewHint={viewHint} onConsumeHint={consumeHint} onNavigate={navigate}/>;
+      case 'notes':        return <Notes {...p} viewHint={viewHint} onConsumeHint={consumeHint}/>;
+      case 'finance':      return <Finance {...p} onBack={back}/>;
+      case 'inbox':        return <Inbox {...p}/>;
+      case 'habits':       return <HabitTracker {...p}/>;
+      case 'journal':      return <Journal {...p}/>;
+      case 'books':        return <Books {...p}/>;
+      case 'shopping':     return <Shopping {...p}/>;
+      case 'education':    return <Education {...p}/>;
+      case 'health':       return <Health {...p} onBack={back}/>;
+      case 'relaciones':   return <Relaciones {...p} onBack={back}/>;
+      case 'sideprojects': return <SideProjects {...p} onBack={back}/>;
+      case 'desarrollo':   return <DesarrolloPersonal {...p} onBack={back}/>;
+      case 'hogar':        return <Hogar {...p} onBack={back}/>;
+      case 'settings':     return <Settings apiKey={apiKey} setApiKey={setApiKey} isMobile={isMobile} data={data} setData={setData} viewHint={viewHint} onConsumeHint={consumeHint}/>;
+      default:             return null;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[view, data, setData, isMobile, viewHint, apiKey, setApiKey]);
+
+  // Keep legacy alias so nothing downstream breaks
+  const views = { [view]: activeView };
   
 
   return (
