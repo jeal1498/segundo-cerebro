@@ -7304,7 +7304,7 @@ const DesarrolloPersonal = ({data,setData,isMobile,onBack}) => {
 // ===================== HOGAR =====================
 // ===================== COCHE =====================
 const FUEL_OPTIONS=['gasolina','diésel','eléctrico','GLP','GNC'];
-const FuelForm=({form,setForm})=>{const T=useTheme();return(
+const FuelForm=({form,setForm})=>(
   <div style={{display:'flex',flexDirection:'column',gap:10}}>
     <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Tipo de energía</label>
       <Select value={form.fuelType||'gasolina'} onChange={v=>setForm(f=>({...f,fuelType:v}))}>
@@ -7326,7 +7326,7 @@ const FuelForm=({form,setForm})=>{const T=useTheme();return(
       </div>
     )}
   </div>
-);};
+);
 
 const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
   const [tab,setTab]     = useState('resumen');
