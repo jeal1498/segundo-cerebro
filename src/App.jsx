@@ -7303,6 +7303,31 @@ const DesarrolloPersonal = ({data,setData,isMobile,onBack}) => {
 
 // ===================== HOGAR =====================
 // ===================== COCHE =====================
+const FUEL_OPTIONS=['gasolina','diésel','eléctrico','GLP','GNC'];
+const FuelForm=({form,setForm})=>{const T=useTheme();return(
+  <div style={{display:'flex',flexDirection:'column',gap:10}}>
+    <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Tipo de energía</label>
+      <Select value={form.fuelType||'gasolina'} onChange={v=>setForm(f=>({...f,fuelType:v}))}>
+        {['gasolina','diésel','híbrido','eléctrico','GLP','GNC'].map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+      </Select>
+    </div>
+    {form.fuelType==='híbrido'&&(
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>⚡ Energía 1</label>
+          <Select value={form.fuelType1||'gasolina'} onChange={v=>setForm(f=>({...f,fuelType1:v}))}>
+            {FUEL_OPTIONS.map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+          </Select>
+        </div>
+        <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>⚡ Energía 2</label>
+          <Select value={form.fuelType2||'GLP'} onChange={v=>setForm(f=>({...f,fuelType2:v}))}>
+            {FUEL_OPTIONS.map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+          </Select>
+        </div>
+      </div>
+    )}
+  </div>
+);};
+
 const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
   const [tab,setTab]     = useState('resumen');
   const [modalMaint,setModalMaint]   = useState(false);
@@ -7361,7 +7386,6 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
     if(ci.fuelType==='híbrido'&&ci.fuelType1&&ci.fuelType2) return `Híbrido (${ci.fuelType1} + ${ci.fuelType2})`;
     return ci.fuelType||'—';
   };
-  const FUEL_OPTIONS=['gasolina','diésel','eléctrico','GLP','GNC'];
 
   // ── helpers ──
   const diffDays=(dateStr)=>{ if(!dateStr) return null; return Math.ceil((new Date(dateStr)-new Date())/(1000*60*60*24)); };
@@ -7482,30 +7506,6 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
   ];
 
   // ── FuelForm component (reusable in both modals) ──
-  const FuelForm=({form,setForm})=>(
-    <div style={{display:'flex',flexDirection:'column',gap:10}}>
-      <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Tipo de energía</label>
-        <Select value={form.fuelType||'gasolina'} onChange={v=>setForm(f=>({...f,fuelType:v}))}>
-          {['gasolina','diésel','híbrido','eléctrico','GLP','GNC'].map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
-        </Select>
-      </div>
-      {form.fuelType==='híbrido'&&(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>⚡ Energía 1</label>
-            <Select value={form.fuelType1||'gasolina'} onChange={v=>setForm(f=>({...f,fuelType1:v}))}>
-              {FUEL_OPTIONS.map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
-            </Select>
-          </div>
-          <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>⚡ Energía 2</label>
-            <Select value={form.fuelType2||'GLP'} onChange={v=>setForm(f=>({...f,fuelType2:v}))}>
-              {FUEL_OPTIONS.map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
-            </Select>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <div>
       {!embedded&&<PageHeader isMobile={isMobile} title="🚗 Mi Coche" onBack={onBack}
@@ -9895,7 +9895,7 @@ self.addEventListener('fetch',e=>{
   useEffect(()=>{
     (async()=>{
       const def=initData();
-      const [areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,healthGoals,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,spTimeLogs,journal,books,shopping,education,carMaintenances,carExpenses,carDocs,carReminders,carInfo]=await Promise.all([
+      const [areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,healthGoals,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,spTimeLogs,journal,books,shopping,education,carMaintenances,carExpenses,carDocs,carReminders,carInfo,vehicles,activeVehicleId]=await Promise.all([
         load('areas',def.areas),load('objectives',def.objectives),load('projects',def.projects),
         load('tasks',def.tasks),load('notes',def.notes),load('inbox',def.inbox),load('habits',def.habits),load('budget',def.budget),
         load('transactions',def.transactions),
