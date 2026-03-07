@@ -420,10 +420,16 @@ const initData = () => ({
 
 // ===================== BASE COMPONENTS =====================
 const Modal = ({title,onClose,children}) => (
-  <div role="dialog" aria-modal="true" aria-label={title} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'flex-end',justifyContent:'center',backdropFilter:'blur(4px)'}}
+  <div role="dialog" aria-modal="true" aria-label={title}
+    style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,
+      display:'flex',alignItems:'center',justifyContent:'center',
+      backdropFilter:'blur(4px)',padding:'16px'}}
     onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:'16px 16px 0 0',padding:24,width:'100%',maxWidth:520,boxShadow:'0 -8px 40px rgba(0,0,0,0.5)',maxHeight:'90vh',overflowY:'auto'}}>
-      <div style={{width:36,height:4,background:T.border,borderRadius:2,margin:'0 auto 20px'}}/>
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:16,
+      padding:24,width:'100%',maxWidth:520,
+      boxShadow:'0 8px 40px rgba(0,0,0,0.6)',
+      maxHeight:'88vh',overflowY:'auto',
+      position:'relative'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
         <h3 style={{margin:0,color:T.text,fontSize:16,fontWeight:600}}>{title}</h3>
         <button onClick={onClose} aria-label="Cerrar" style={{background:'none',border:'none',color:T.muted,cursor:'pointer',padding:4,display:'flex'}}><Icon name="x" size={18}/></button>
@@ -474,16 +480,19 @@ const Card = ({children,style={},onClick}) => (
 
 const PageHeader = ({title,subtitle,action,isMobile,onBack}) => (
   <div style={{marginBottom:20}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        {onBack&&(
-          <button onClick={onBack} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:10,padding:'6px 10px',cursor:'pointer',color:T.muted,display:'flex',alignItems:'center',gap:4,fontFamily:'inherit',fontSize:12}}>
-            <Icon name="back" size={16}/><span style={{fontSize:12,fontWeight:500}}>Áreas</span>
-          </button>
-        )}
-        <h2 style={{margin:0,color:T.text,fontSize:isMobile?18:20,fontWeight:700}}>{title}</h2>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+      {/* Back button */}
+      {onBack&&(
+        <button onClick={onBack} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:10,padding:'6px 10px',cursor:'pointer',color:T.muted,display:'flex',alignItems:'center',gap:4,fontFamily:'inherit',fontSize:12,flexShrink:0}}>
+          <Icon name="back" size={16}/><span style={{fontSize:12,fontWeight:500}}>Atrás</span>
+        </button>
+      )}
+      {/* Title centered */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:onBack&&action?'center':onBack||action?'flex-start':'flex-start',minWidth:0}}>
+        <h2 style={{margin:0,color:T.text,fontSize:isMobile?18:20,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>{title}</h2>
       </div>
-      {action}
+      {/* Action */}
+      {action&&<div style={{flexShrink:0}}>{action}</div>}
     </div>
     {subtitle&&<p style={{color:T.muted,fontSize:13,marginTop:4,marginBottom:0}}>{subtitle}</p>}
   </div>
@@ -9942,7 +9951,11 @@ self.addEventListener('fetch',e=>{
 
   // ── Hooks must be declared before any conditional return (Rules of Hooks) ──
   const consumeHint = useCallback(()=>setViewHint(null),[]);
-  const backToDashboard = useCallback(()=>navTo('dashboard'),[]);
+  // Fix: use setView directly to avoid stale 'view' closure in navTo
+  const backToDashboard = useCallback(()=>{
+    setTransitioning(true);
+    setTimeout(()=>{setView('dashboard');setViewHint(null);setTransitioning(false);},120);
+  },[]);
 
   if(!data) return <AppLoader/>;
 
@@ -9955,7 +9968,7 @@ self.addEventListener('fetch',e=>{
     switch(view){
       case 'dashboard':    return <Dashboard {...p} onNavigate={navigate}/>;
       case 'areas':        return <Areas data={data} isMobile={isMobile} onNavigate={navigate}/>;
-      case 'areaDetail':   return <AreaDetail {...p} viewHint={viewHint} onConsumeHint={consumeHint} onNavigate={navigate} onBack={()=>navTo('areas')}/>;
+      case 'areaDetail':   return <AreaDetail {...p} viewHint={viewHint} onConsumeHint={consumeHint} onNavigate={navigate} onBack={()=>{setTransitioning(true);setTimeout(()=>{setView('areas');setViewHint(null);setTransitioning(false);},120);}}/>;
       case 'objectives':   return <Objectives {...p} viewHint={viewHint} onConsumeHint={consumeHint} onNavigate={navigate}/>;
       case 'projects':     return <ProjectsAndTasks {...p} viewHint={viewHint} onConsumeHint={consumeHint} onNavigate={navigate}/>;
       case 'notes':        return <Notes {...p} viewHint={viewHint} onConsumeHint={consumeHint}/>;
