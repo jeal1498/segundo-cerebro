@@ -887,7 +887,7 @@ const Dashboard = ({data,setData,isMobile,onNavigate}) => {
             {label:'Relaciones', icon:'👥', route:'relaciones',   color:'#ff8c42'},
             {label:'Desarrollo', icon:'🧠', route:'desarrollo',   color:'#ff5069'},
             {label:'S. Projects',icon:'🚀', route:'sideprojects', color:'#ffd166'},
-            {label:'Trabajo',    icon:'💼', route:'projects',     color:'#4da6ff'},
+            {label:'Trabajo',    icon:'💼', route:'trabajo',      color:'#4da6ff'},
             {label:'Objetivos',  icon:'🎯', route:'objectives',   color:'#00c896'},
           ].map(p=>(
             <div key={p.route} onClick={()=>onNavigate&&onNavigate(p.route,null)}
@@ -5320,7 +5320,7 @@ const MOBILE_NAV=[
   {id:'dashboard',label:'Inicio',icon:'home'},
   {id:'__psicke__',label:'Psicke',icon:'brain'},
   {id:'notes',label:'Notas',icon:'note'},
-  {id:'projects',label:'Trabajo',icon:'folder'},
+  {id:'trabajo',label:'Trabajo',icon:'folder'},
   {id:'habits',label:'Hábitos',icon:'habit'},
 ];
 const MORE_NAV=NAV.slice(5);
@@ -9472,6 +9472,7 @@ self.addEventListener('fetch',e=>{
       case 'health':       return <Health {...p} onBack={backToDashboard}/>;
       case 'relaciones':   return <Relaciones {...p} onBack={backToDashboard}/>;
       case 'sideprojects': return <SideProjects {...p} onBack={backToDashboard}/>;
+      case 'trabajo':      return <TrabajoEmbed isMobile={isMobile} onBack={backToDashboard}/>;
       case 'desarrollo':   return <DesarrolloPersonal {...p} onBack={backToDashboard}/>;
       case 'hogar':        return <Hogar {...p} onBack={backToDashboard}/>;
       case 'coche':        return <Coche {...p} onBack={backToDashboard}/>;
