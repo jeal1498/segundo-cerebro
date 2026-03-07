@@ -413,7 +413,9 @@ const initData = () => ({
   carExpenses:[],
   carDocs:[],
   carReminders:[],
-  carInfo:{brand:'',model:'',year:'',plate:'',km:'',fuelType:'gasolina'},
+  carInfo:{brand:'',model:'',year:'',plate:'',km:'',fuelType:'gasolina',fuelType1:'',fuelType2:''},
+  vehicles:[],
+  activeVehicleId:null,
 });
 
 // ===================== BASE COMPONENTS =====================
@@ -7308,6 +7310,7 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
   const [modalDoc,setModalDoc]       = useState(false);
   const [modalReminder,setModalReminder] = useState(false);
   const [modalInfo,setModalInfo]     = useState(false);
+  const [modalNewVehicle,setModalNewVehicle] = useState(false);
   const [editItem,setEditItem]       = useState(null);
   const [editForm,setEditForm]       = useState({});
 
@@ -7315,17 +7318,50 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
   const emptyExp     = {concept:'',category:'Combustible',amount:'',date:today(),notes:''};
   const emptyDoc     = {name:'',category:'Seguro',expiresAt:'',provider:'',amount:'',notes:''};
   const emptyReminder= {title:'',dueDate:'',notes:'',done:false};
+  const emptyVehicle = {brand:'',model:'',year:'',plate:'',km:'',fuelType:'gasolina',fuelType1:'',fuelType2:''};
   const [maintForm,setMaintForm]     = useState(emptyMaint);
   const [expForm,setExpForm]         = useState(emptyExp);
   const [docForm,setDocForm]         = useState(emptyDoc);
   const [reminderForm,setReminderForm] = useState(emptyReminder);
-  const [infoForm,setInfoForm]       = useState({brand:'',model:'',year:'',plate:'',km:'',fuelType:'gasolina'});
+  const [infoForm,setInfoForm]       = useState({brand:'',model:'',year:'',plate:'',km:'',fuelType:'gasolina',fuelType1:'',fuelType2:''});
+  const [newVehicleForm,setNewVehicleForm] = useState(emptyVehicle);
 
   const maints   = data.carMaintenances||[];
   const expenses = data.carExpenses||[];
   const docs     = data.carDocs||[];
   const reminders= data.carReminders||[];
-  const carInfo  = data.carInfo||{brand:'',model:'',year:'',plate:'',km:'',fuelType:'gasolina'};
+  const carInfo  = data.carInfo||{brand:'',model:'',year:'',plate:'',km:'',fuelType:'gasolina',fuelType1:'',fuelType2:''};
+
+  // ── Multi-vehicle ──
+  const vehicles = data.vehicles||[];
+  const activeVehicleId = data.activeVehicleId||null;
+
+  const switchVehicle=(v)=>{
+    setData(d=>({...d,carInfo:v,activeVehicleId:v.id}));
+    save('carInfo',v); save('activeVehicleId',v.id);
+  };
+  const saveNewVehicle=()=>{
+    if(!newVehicleForm.brand.trim()) return;
+    const v={...newVehicleForm,id:uid(),createdAt:today()};
+    const upd=[...vehicles,v];
+    setData(d=>({...d,vehicles:upd}));
+    save('vehicles',upd);
+    setModalNewVehicle(false);
+    setNewVehicleForm(emptyVehicle);
+  };
+  const deleteVehicle=(vid)=>{
+    if(!window.confirm('¿Eliminar este vehículo?')) return;
+    const upd=vehicles.filter(v=>v.id!==vid);
+    setData(d=>({...d,vehicles:upd}));
+    save('vehicles',upd);
+  };
+
+  // Helper: label de combustible
+  const fuelLabel=(ci)=>{
+    if(ci.fuelType==='híbrido'&&ci.fuelType1&&ci.fuelType2) return `Híbrido (${ci.fuelType1} + ${ci.fuelType2})`;
+    return ci.fuelType||'—';
+  };
+  const FUEL_OPTIONS=['gasolina','diésel','eléctrico','GLP','GNC'];
 
   // ── helpers ──
   const diffDays=(dateStr)=>{ if(!dateStr) return null; return Math.ceil((new Date(dateStr)-new Date())/(1000*60*60*24)); };
@@ -7424,7 +7460,16 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
 
   // ── INFO actions ──
   const saveInfo=()=>{
-    setData(d=>({...d,carInfo:infoForm})); save('carInfo',infoForm);
+    const updated={...infoForm,id:infoForm.id||uid()};
+    // Also update in vehicles array if it's there
+    const inVehicles=vehicles.some(v=>v.id===updated.id);
+    if(inVehicles){
+      const updVeh=vehicles.map(v=>v.id===updated.id?updated:v);
+      setData(d=>({...d,carInfo:updated,vehicles:updVeh}));
+      save('carInfo',updated); save('vehicles',updVeh);
+    } else {
+      setData(d=>({...d,carInfo:updated})); save('carInfo',updated);
+    }
     setModalInfo(false); toast.success('Datos del coche guardados');
   };
 
@@ -7436,12 +7481,38 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
     {id:'recordatorios',label:'Alertas',emoji:'🔔'},
   ];
 
+  // ── FuelForm component (reusable in both modals) ──
+  const FuelForm=({form,setForm})=>(
+    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Tipo de energía</label>
+        <Select value={form.fuelType||'gasolina'} onChange={v=>setForm(f=>({...f,fuelType:v}))}>
+          {['gasolina','diésel','híbrido','eléctrico','GLP','GNC'].map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+        </Select>
+      </div>
+      {form.fuelType==='híbrido'&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>⚡ Energía 1</label>
+            <Select value={form.fuelType1||'gasolina'} onChange={v=>setForm(f=>({...f,fuelType1:v}))}>
+              {FUEL_OPTIONS.map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+            </Select>
+          </div>
+          <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>⚡ Energía 2</label>
+            <Select value={form.fuelType2||'GLP'} onChange={v=>setForm(f=>({...f,fuelType2:v}))}>
+              {FUEL_OPTIONS.map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+            </Select>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div>
       {!embedded&&<PageHeader isMobile={isMobile} title="🚗 Mi Coche" onBack={onBack}
         subtitle={carInfo.brand?`${carInfo.brand} ${carInfo.model} ${carInfo.year} · ${carInfo.plate}`:'Gestión completa de tu vehículo'}
         action={
           <div style={{display:'flex',gap:8}}>
+            <Btn size="sm" variant="ghost" onClick={()=>setModalNewVehicle(true)}>+ Vehículo</Btn>
             <Btn size="sm" variant="ghost" onClick={()=>{setInfoForm({...carInfo});setModalInfo(true);}}>⚙️ Datos</Btn>
             {tab==='mantenimiento'  &&<Btn size="sm" onClick={()=>setModalMaint(true)}><Icon name="plus" size={14}/>Mant.</Btn>}
             {tab==='gastos'        &&<Btn size="sm" onClick={()=>setModalExp(true)}><Icon name="plus" size={14}/>Gasto</Btn>}
@@ -7471,6 +7542,37 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
         ))}
       </div>
 
+      {/* ── Vehicle switcher ── */}
+      {vehicles.length>0&&(
+        <div style={{display:'flex',gap:8,marginBottom:14,overflowX:'auto',paddingBottom:2,alignItems:'center'}}>
+          <span style={{fontSize:11,color:T.muted,whiteSpace:'nowrap'}}>Vehículos:</span>
+          {/* Primary vehicle */}
+          <button onClick={()=>{setData(d=>({...d,activeVehicleId:null}));save('activeVehicleId',null);}}
+            style={{border:`2px solid ${!activeVehicleId?T.accent:T.border}`,borderRadius:20,padding:'5px 12px',cursor:'pointer',
+              background:!activeVehicleId?T.accent+'22':T.surface,color:!activeVehicleId?T.accent:T.muted,
+              fontFamily:'inherit',fontSize:12,fontWeight:600,whiteSpace:'nowrap'}}>
+            🚗 {carInfo.brand||'Principal'}
+          </button>
+          {vehicles.map(v=>(
+            <div key={v.id} style={{display:'flex',alignItems:'center',gap:4}}>
+              <button onClick={()=>switchVehicle(v)}
+                style={{border:`2px solid ${activeVehicleId===v.id?T.accent:T.border}`,borderRadius:20,padding:'5px 12px',cursor:'pointer',
+                  background:activeVehicleId===v.id?T.accent+'22':T.surface,color:activeVehicleId===v.id?T.accent:T.muted,
+                  fontFamily:'inherit',fontSize:12,fontWeight:600,whiteSpace:'nowrap'}}>
+                🚙 {v.brand} {v.model}
+              </button>
+              <button onClick={()=>deleteVehicle(v.id)}
+                style={{background:'none',border:'none',cursor:'pointer',color:T.muted,fontSize:14,padding:2}}>×</button>
+            </div>
+          ))}
+          <button onClick={()=>setModalNewVehicle(true)}
+            style={{border:`2px dashed ${T.border}`,borderRadius:20,padding:'5px 12px',cursor:'pointer',
+              background:'none',color:T.muted,fontFamily:'inherit',fontSize:12,whiteSpace:'nowrap'}}>
+            + Añadir
+          </button>
+        </div>
+      )}
+
       {/* ══════════ RESUMEN ══════════ */}
       {tab==='resumen'&&(
         <div>
@@ -7496,7 +7598,7 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                 <div>
                   <div style={{fontSize:16,fontWeight:700,color:T.text}}>{carInfo.brand} {carInfo.model}</div>
-                  <div style={{fontSize:13,color:T.muted,marginTop:3}}>{carInfo.year} · {carInfo.plate} · {carInfo.fuelType}</div>
+                  <div style={{fontSize:13,color:T.muted,marginTop:3}}>{carInfo.year} · {carInfo.plate} · {fuelLabel(carInfo)}</div>
                   {carInfo.km&&<div style={{fontSize:13,color:T.accent,marginTop:3,fontWeight:600}}>🛣 {Number(carInfo.km).toLocaleString()} km</div>}
                 </div>
                 <div style={{fontSize:36}}>🚗</div>
@@ -7720,6 +7822,25 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
 
       {/* ══════════ MODALES ══════════ */}
 
+      {/* Modal: Nuevo vehículo */}
+      {modalNewVehicle&&(
+        <Modal title="🚙 Añadir vehículo" onClose={()=>setModalNewVehicle(false)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Marca *</label><Input value={newVehicleForm.brand} onChange={v=>setNewVehicleForm(f=>({...f,brand:v}))} placeholder="Honda"/></div>
+              <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Modelo</label><Input value={newVehicleForm.model} onChange={v=>setNewVehicleForm(f=>({...f,model:v}))} placeholder="Civic"/></div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Año</label><Input value={newVehicleForm.year} onChange={v=>setNewVehicleForm(f=>({...f,year:v}))} placeholder="2022"/></div>
+              <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Matrícula</label><Input value={newVehicleForm.plate} onChange={v=>setNewVehicleForm(f=>({...f,plate:v.toUpperCase()}))} placeholder="XYZ 5678"/></div>
+            </div>
+            <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Kilómetros actuales</label><Input value={newVehicleForm.km} onChange={v=>setNewVehicleForm(f=>({...f,km:v}))} placeholder="0" type="number"/></div>
+            <FuelForm form={newVehicleForm} setForm={setNewVehicleForm}/>
+            <Btn onClick={saveNewVehicle}>Añadir vehículo</Btn>
+          </div>
+        </Modal>
+      )}
+
       {/* Modal: Datos del coche */}
       {modalInfo&&(
         <Modal title="🚗 Datos del coche" onClose={()=>setModalInfo(false)}>
@@ -7733,11 +7854,7 @@ const Coche = ({data,setData,isMobile,onBack,embedded=false}) => {
               <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Matrícula</label><Input value={infoForm.plate} onChange={v=>setInfoForm(f=>({...f,plate:v.toUpperCase()}))} placeholder="1234 ABC"/></div>
             </div>
             <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Kilómetros actuales</label><Input value={infoForm.km} onChange={v=>setInfoForm(f=>({...f,km:v}))} placeholder="85000" type="number"/></div>
-            <div><label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>Combustible</label>
-              <Select value={infoForm.fuelType} onChange={v=>setInfoForm(f=>({...f,fuelType:v}))}>
-                {['gasolina','diésel','híbrido','eléctrico','GLP','GNC'].map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
-              </Select>
-            </div>
+            <FuelForm form={infoForm} setForm={setInfoForm}/>
             <Btn onClick={saveInfo}>Guardar</Btn>
           </div>
         </Modal>
@@ -9790,8 +9907,9 @@ self.addEventListener('fetch',e=>{
         load('journal',def.journal),load('books',def.books),load('shopping',def.shopping),load('education',def.education),
         load('carMaintenances',def.carMaintenances),load('carExpenses',def.carExpenses),
         load('carDocs',def.carDocs),load('carReminders',def.carReminders),load('carInfo',def.carInfo),
+        load('vehicles',def.vehicles),load('activeVehicleId',def.activeVehicleId),
       ]);
-      setData({areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,healthGoals,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,journal,books,shopping,education,carMaintenances,carExpenses,carDocs,carReminders,carInfo});
+      setData({areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,healthGoals,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,journal,books,shopping,education,carMaintenances,carExpenses,carDocs,carReminders,carInfo,vehicles,activeVehicleId});
     })();
   },[]);
 
