@@ -4312,13 +4312,13 @@ const Psicke=({apiKey,onGoSettings,data,setData,openFromNav,onNavClose})=>{
         parts:[{text:(m.content||'').replace(/\n\n✅[^\n]*/g,'').trim()||' '}]
       }));
       const body={
-        system_instruction:{parts:[{text:sysPrompt}]},
+        system_instruction:{role:'system',parts:[{text:sysPrompt}]},
         contents:[
           {role:'user',parts:[{text:'Hola Psicke, estoy listo.'}]},
           {role:'model',parts:[{text:'Aquí Psicke. ¿En qué está pensando?'}]},
           ...cleanMsgs
         ],
-        generationConfig:{temperature:0.7,maxOutputTokens:2500},
+        generationConfig:{temperature:0.7,maxOutputTokens:3000},
       };
 
       // API call with one retry on 429
@@ -4345,8 +4345,10 @@ const Psicke=({apiKey,onGoSettings,data,setData,openFromNav,onNavClose})=>{
       const candidate=d.candidates?.[0];
       if(!candidate?.content?.parts?.[0]?.text){
         const reason=candidate?.finishReason||d.promptFeedback?.blockReason||'desconocido';
+        const safetyRatings=candidate?.safetyRatings?.filter(r=>r.probability!=='NEGLIGIBLE').map(r=>`${r.category}:${r.probability}`).join(', ')||'';
         if(reason==='SAFETY')throw new Error('Respuesta bloqueada por filtros de seguridad. Intente reformular.');
-        throw new Error(`Sin respuesta (${reason})`);
+        if(reason==='MAX_TOKENS')throw new Error('Respuesta cortada por límite de tokens. Intente un mensaje más corto.');
+        throw new Error(`Sin respuesta (${reason}${safetyRatings?' · '+safetyRatings:''})`);
       }
       const raw=candidate.content.parts[0].text;
 
