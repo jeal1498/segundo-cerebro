@@ -5545,10 +5545,10 @@ const NAV_SECTIONS=[
 const NAV=NAV_SECTIONS.flatMap(s=>s.items);
 const MOBILE_NAV=[
   {id:'dashboard',label:'Inicio',icon:'home'},
+  {id:'inbox',label:'Inbox',icon:'inbox'},
   {id:'__psicke__',label:'Psicke',icon:'brain'},
-  {id:'notes',label:'Notas',icon:'note'},
-  {id:'trabajo',label:'Trabajo',icon:'folder'},
-  {id:'habits',label:'Hábitos',icon:'habit'},
+  {id:'finance',label:'Finanzas',icon:'money'},
+  {id:'areas',label:'Áreas',icon:'grid'},
 ];
 const MORE_NAV=NAV.slice(5);
 
