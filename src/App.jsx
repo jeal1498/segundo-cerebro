@@ -267,6 +267,7 @@ const initData = () => ({
   budget:[],
   transactions:[],
   healthMetrics:[],
+  healthGoals:{peso:75,sueño:8,pasos:10000,agua:2,entrenosSem:4},
   medications:[],
   workouts:[],
   maintenances:[],
@@ -2961,6 +2962,27 @@ const Settings = ({apiKey,setApiKey,isMobile,data,setData,viewHint,onConsumeHint
       });
     }
 
+    // Medicamentos: recordatorio automático según hora configurada
+    if(notifSettings.meds && data.medications){
+      (data.medications||[]).forEach(med=>{
+        if(!med.time) return;
+        const [hh,mm]=(med.time).split(':').map(Number);
+        const now=new Date();
+        const next=new Date(now.getFullYear(),now.getMonth(),now.getDate(),hh,mm,0,0);
+        if(next<=now) next.setDate(next.getDate()+1);
+        const ms=next-now;
+        // Only schedule if within 24h
+        if(ms>0&&ms<86400000){
+          notifTimersRef.current[`med_${med.id}`]=setTimeout(()=>{
+            new Notification(`💊 Medicamento: ${med.name}`,{
+              body:`${med.dose||''}${med.unit||''} — ${med.frequency||'Diaria'}`,
+              icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">💊</text></svg>'
+            });
+          },ms);
+        }
+      });
+    }
+
     return ()=>Object.values(notifTimersRef.current).forEach(clearTimeout);
   },[notifEnabled,notifSettings,data]);
 
@@ -3205,6 +3227,8 @@ const buildPsickePrompt=(data)=>{
   const recentMetrics=(data.healthMetrics||[]).slice(0,5).map(m=>`• ${m.type}: ${m.value} ${m.unit||''} (${m.date})`).join('\n');
   const medications=(data.medications||[]).map(m=>`• ${m.name} ${m.dose||''} ${m.unit||''} — ${m.frequency||''}`).join('\n');
   const recentWorkouts=(data.workouts||[]).slice(0,4).map(w=>`• ${w.type} ${w.duration||''}min ${w.date}`).join('\n');
+  const hg=data.healthGoals||{};
+  const healthGoalsSummary=Object.entries(hg).map(([k,v])=>`${k}: ${v}`).join(', ');
 
   // ── Hogar ──
   const maintenances=(data.maintenances||[]).slice(0,5).map(m=>`• ${m.name} — cada ${m.frequencyDays}d, último: ${m.lastDone||'nunca'}`).join('\n');
@@ -3282,6 +3306,7 @@ ${budgetSummary||'(sin presupuesto)'}
 ── SALUD ──
 Métricas recientes:
 ${recentMetrics||'(sin métricas)'}
+Metas de salud: ${healthGoalsSummary||'(por defecto)'}
 Medicamentos:
 ${medications||'(sin medicamentos)'}
 Actividad reciente:
@@ -6831,11 +6856,21 @@ const Health = ({data,setData,isMobile,onBack}) => {
   };
   const delWorkout=(id)=>{const u=workouts.filter(w=>w.id!==id);setData(d=>({...d,workouts:u}));save('workouts',u);};
 
+  const [goalEditModal,setGoalEditModal]=useState(false);
+  const [goalForm,setGoalForm]=useState({});
+
+  const hGoals=data.healthGoals||{peso:75,sueño:8,pasos:10000,agua:2,entrenosSem:4};
+
+  const saveHealthGoal=(key,val)=>{
+    const upd={...hGoals,[key]:Number(val)};
+    setData(d=>({...d,healthGoals:upd}));save('healthGoals',upd);
+  };
+
   const METRIC_CFG={
-    peso:  {label:'Peso',  unit:'kg',color:T.blue,   goal:75, goalLabel:'Meta: 75 kg',  icon:'⚖️',lowerBetter:true},
-    sueño: {label:'Sueño', unit:'h', color:T.purple,  goal:8,  goalLabel:'Meta: 8h',     icon:'😴',lowerBetter:false},
-    pasos: {label:'Pasos', unit:'',  color:T.accent,  goal:10000,goalLabel:'Meta: 10k', icon:'👟',lowerBetter:false},
-    agua:  {label:'Agua',  unit:'L', color:T.blue,    goal:2,  goalLabel:'Meta: 2L',     icon:'💧',lowerBetter:false},
+    peso:  {label:'Peso',  unit:'kg',color:T.blue,   goal:hGoals.peso||75, icon:'⚖️',lowerBetter:true},
+    sueño: {label:'Sueño', unit:'h', color:T.purple,  goal:hGoals.sueño||8,  icon:'😴',lowerBetter:false},
+    pasos: {label:'Pasos', unit:'',  color:T.accent,  goal:hGoals.pasos||10000, icon:'👟',lowerBetter:false},
+    agua:  {label:'Agua',  unit:'L', color:T.blue,    goal:hGoals.agua||2,   icon:'💧',lowerBetter:false},
   };
 
   const cfg=METRIC_CFG[metric]||METRIC_CFG.peso;
@@ -6863,6 +6898,47 @@ const Health = ({data,setData,isMobile,onBack}) => {
     const diff=Math.floor((ref-d)/86400000);
     if(diff===i||(i===0&&diff<=1)){wStreak++;}else break;
   }
+  // Best workout streak
+  const wBestStreak=(()=>{
+    if(!sortedDates.length)return 0;
+    const asc=[...sortedDates].reverse();
+    let maxS=1,cur=1;
+    for(let i=1;i<asc.length;i++){
+      const diff=(new Date(asc[i])-new Date(asc[i-1]))/86400000;
+      if(diff===1){cur++;maxS=Math.max(maxS,cur);}else cur=1;
+    }
+    return maxS;
+  })();
+  // Workout heatmap - last 14 days
+  const wHeatmap=Array.from({length:14},(_,i)=>{
+    const d=new Date();d.setDate(d.getDate()-(13-i));
+    const str=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const count=workouts.filter(w=>w.date===str).length;
+    return {date:str,count,label:d.toLocaleDateString('es-ES',{weekday:'narrow'})};
+  });
+
+  // Weekly summary data
+  const weekSummary=(()=>{
+    const now=new Date();
+    const weekStart=new Date(now);weekStart.setDate(now.getDate()-6);
+    const wsStr=`${weekStart.getFullYear()}-${String(weekStart.getMonth()+1).padStart(2,'0')}-${String(weekStart.getDate()).padStart(2,'0')}`;
+    const wkWorkouts=workouts.filter(w=>w.date>=wsStr);
+    const wkMin=wkWorkouts.reduce((s,w)=>s+(w.duration||0),0);
+    const wkCal=wkWorkouts.reduce((s,w)=>s+(w.calories||0),0);
+    const metricDeltas=Object.entries(METRIC_CFG).map(([k,c])=>{
+      const mEntries=metrics[k]||[];
+      const recent=mEntries.filter(e=>e.date>=wsStr);
+      if(recent.length<2)return {key:k,...c,delta:null};
+      const first=recent[0].value,last=recent[recent.length-1].value;
+      return {key:k,...c,delta:last-first,last};
+    });
+    const dailyHabits=(data.habits||[]).filter(h=>!h.frequency||h.frequency==='daily');
+    const last7=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
+    const habitTotal=dailyHabits.reduce((s,h)=>s+last7.filter(d=>h.completions.includes(d)).length,0);
+    const habitPossible=dailyHabits.length*7;
+    const habitPct=habitPossible?Math.round(habitTotal/habitPossible*100):0;
+    return {workouts:wkWorkouts.length,min:wkMin,cal:wkCal,metricDeltas,habitPct};
+  })();
 
   const WORKOUT_TYPES=['Gym','Correr','Ciclismo','Natación','Yoga','HIIT','Caminata','Otro'];
   const wtIcon=(t)=>t==='Correr'?'🏃':t==='Gym'?'🏋️':t==='Ciclismo'?'🚴':t==='Natación'?'🏊':t==='Yoga'?'🧘':t==='HIIT'?'⚡':t==='Caminata'?'🚶':'💪';
@@ -6870,10 +6946,10 @@ const Health = ({data,setData,isMobile,onBack}) => {
   const fmtVal=v=>metric==='pasos'?Number(v).toLocaleString():v;
 
   const GOALS=[
-    {label:'Peso objetivo',icon:'⚖️',metric:'peso',current:mData.length?mData[mData.length-1].value+'kg':'—',goal:'75 kg',pct:Math.min(Math.round((mData.length?(75/mData[mData.length-1].value)*100:0)),100),color:T.blue,inv:true},
-    {label:'Sueño promedio',icon:'😴',metric:'sueño',current:(metrics.sueño||[]).slice(-7).length?((metrics.sueño||[]).slice(-7).reduce((s,e)=>s+e.value,0)/Math.min(7,(metrics.sueño||[]).length)).toFixed(1)+'h':'—',goal:'8h/noche',pct:Math.min(Math.round(((metrics.sueño||[]).slice(-7).length?((metrics.sueño||[]).slice(-7).reduce((s,e)=>s+e.value,0)/(7*8))*100:0)),100),color:T.purple,inv:false},
-    {label:'Pasos diarios',icon:'👟',metric:'pasos',current:(metrics.pasos||[]).slice(-7).length?Math.round((metrics.pasos||[]).slice(-7).reduce((s,e)=>s+e.value,0)/(metrics.pasos||[]).slice(-7).length).toLocaleString():'—',goal:'10,000',pct:Math.min(Math.round(((metrics.pasos||[]).slice(-7).length?((metrics.pasos||[]).slice(-7).reduce((s,e)=>s+e.value,0)/((metrics.pasos||[]).slice(-7).length*10000))*100:0)),100),color:T.accent,inv:false},
-    {label:'Entrenos/semana',icon:'🏋️',current:`${weekWorkouts.length}`,goal:'4 sesiones',pct:Math.min(Math.round((weekWorkouts.length/4)*100),100),color:T.orange,inv:false},
+    {label:'Peso objetivo',icon:'⚖️',metricKey:'peso',current:mData.length&&metric==='peso'?mData[mData.length-1].value+'kg':((metrics.peso||[]).length?(metrics.peso||[]).slice(-1)[0].value+'kg':'—'),goal:`${hGoals.peso||75} kg`,pct:Math.min(Math.round(((metrics.peso||[]).length?((hGoals.peso||75)/(metrics.peso||[]).slice(-1)[0].value)*100:0)),100),color:T.blue,inv:true},
+    {label:'Sueño promedio',icon:'😴',metricKey:'sueño',current:(metrics.sueño||[]).slice(-7).length?((metrics.sueño||[]).slice(-7).reduce((s,e)=>s+e.value,0)/Math.min(7,(metrics.sueño||[]).length)).toFixed(1)+'h':'—',goal:`${hGoals.sueño||8}h/noche`,pct:Math.min(Math.round(((metrics.sueño||[]).slice(-7).length?((metrics.sueño||[]).slice(-7).reduce((s,e)=>s+e.value,0)/(7*(hGoals.sueño||8)))*100:0)),100),color:T.purple,inv:false},
+    {label:'Pasos diarios',icon:'👟',metricKey:'pasos',current:(metrics.pasos||[]).slice(-7).length?Math.round((metrics.pasos||[]).slice(-7).reduce((s,e)=>s+e.value,0)/(metrics.pasos||[]).slice(-7).length).toLocaleString():'—',goal:(hGoals.pasos||10000).toLocaleString(),pct:Math.min(Math.round(((metrics.pasos||[]).slice(-7).length?((metrics.pasos||[]).slice(-7).reduce((s,e)=>s+e.value,0)/((metrics.pasos||[]).slice(-7).length*(hGoals.pasos||10000)))*100:0)),100),color:T.accent,inv:false},
+    {label:'Entrenos/semana',icon:'🏋️',metricKey:'entrenosSem',current:`${weekWorkouts.length}`,goal:`${hGoals.entrenosSem||4} sesiones`,pct:Math.min(Math.round((weekWorkouts.length/(hGoals.entrenosSem||4))*100),100),color:T.orange,inv:false},
   ];
 
   return (
@@ -6885,14 +6961,15 @@ const Health = ({data,setData,isMobile,onBack}) => {
         </div>}/>
 
       {/* Summary row */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:16}}>
         {[
           {label:'Racha entrenos',val:`🔥 ${wStreak}d`,color:T.orange},
+          {label:'Mejor racha',val:`⚡ ${wBestStreak}d`,color:T.purple},
           {label:'Esta semana',val:`${weekWorkouts.length} sesiones`,color:T.blue},
           {label:'Calorías 7d',val:weekCal>0?weekCal.toLocaleString():'—',color:T.red},
         ].map(s=>(
-          <Card key={s.label} style={{padding:12,textAlign:'center'}}>
-            <div style={{fontSize:13,fontWeight:800,color:s.color}}>{s.val}</div>
+          <Card key={s.label} style={{padding:isMobile?8:12,textAlign:'center'}}>
+            <div style={{fontSize:isMobile?12:13,fontWeight:800,color:s.color}}>{s.val}</div>
             <div style={{fontSize:10,color:T.muted,marginTop:3}}>{s.label}</div>
           </Card>
         ))}
@@ -6900,7 +6977,7 @@ const Health = ({data,setData,isMobile,onBack}) => {
 
       {/* Tab nav */}
       <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-        {[['trends','📈 Tendencias'],['workouts','🏃 Entrenos'],['goals','🎯 Metas'],['meds','💊 Medicamentos']].map(([id,label])=>(
+        {[['trends','📈 Tendencias'],['workouts','🏃 Entrenos'],['summary','📊 Resumen'],['goals','🎯 Metas'],['meds','💊 Medicamentos']].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)}
             style={{padding:'6px 14px',borderRadius:10,border:`1px solid ${tab===id?T.green:T.border}`,background:tab===id?`${T.green}18`:'transparent',color:tab===id?T.green:T.muted,cursor:'pointer',fontSize:12,fontWeight:tab===id?700:400,fontFamily:'inherit',whiteSpace:'nowrap'}}>
             {label}
@@ -6934,7 +7011,7 @@ const Health = ({data,setData,isMobile,onBack}) => {
                   </div>}
                 </div>
                 <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:11,color:T.muted}}>{cfg.goalLabel}</div>
+                  <div style={{fontSize:11,color:T.muted}}>Meta: {metric==='pasos'?cfg.goal.toLocaleString():cfg.goal} {cfg.unit}</div>
                   <div style={{fontSize:13,fontWeight:700,color:goalColor,marginTop:2}}>{cfg.lowerBetter?goalPct<=100?'✓ Dentro de meta':'Por encima':goalPct+'% de meta'}</div>
                 </div>
               </div>
@@ -6979,6 +7056,24 @@ const Health = ({data,setData,isMobile,onBack}) => {
               ))}
             </div>
           </Card>
+          {/* Workout heatmap - últimos 14 días */}
+          <Card style={{marginBottom:12,padding:14}}>
+            <div style={{fontWeight:600,fontSize:12,color:T.muted,marginBottom:8}}>Actividad — últimos 14 días</div>
+            <div style={{display:'flex',gap:4,alignItems:'flex-end'}}>
+              {wHeatmap.map((d,i)=>(
+                <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+                  <div style={{
+                    width:'100%',height:d.count>0?Math.max(d.count*14,14):6,maxHeight:42,
+                    borderRadius:4,
+                    background:d.count>0?T.accent:`${T.border}`,
+                    opacity:d.count>0?Math.min(0.4+d.count*0.3,1):0.3,
+                    transition:'all 0.3s',
+                  }} title={`${d.date}: ${d.count} entreno${d.count!==1?'s':''}`}/>
+                  <span style={{fontSize:8,color:d.date===today()?T.accent:T.dim}}>{d.label}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
           {workouts.slice(0,10).map(w=>(
             <div key={w.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,marginBottom:6}}>
               <div style={{width:36,height:36,borderRadius:9,background:`${T.blue}18`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{wtIcon(w.type)}</div>
@@ -6994,10 +7089,84 @@ const Health = ({data,setData,isMobile,onBack}) => {
         </div>
       )}
 
+      {/* ── WEEKLY SUMMARY ── */}
+      {tab==='summary'&&(
+        <div>
+          <Card style={{padding:18,marginBottom:12}}>
+            <div style={{fontWeight:700,fontSize:14,color:T.text,marginBottom:14}}>📊 Resumen semanal de actividad</div>
+            {/* Workout stats */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:18}}>
+              {[
+                {l:'Entrenos',v:weekSummary.workouts,c:T.accent,icon:'🏋️'},
+                {l:'Minutos totales',v:weekSummary.min,c:T.blue,icon:'⏱'},
+                {l:'Calorías quemadas',v:weekSummary.cal||'—',c:T.red,icon:'🔥'},
+              ].map(s=>(
+                <div key={s.l} style={{background:T.surface2,borderRadius:10,padding:'12px 10px',textAlign:'center'}}>
+                  <div style={{fontSize:18,marginBottom:4}}>{s.icon}</div>
+                  <div style={{fontSize:18,fontWeight:800,color:s.c}}>{s.v}</div>
+                  <div style={{fontSize:9,color:T.muted,marginTop:3}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+            {/* Consistency */}
+            <div style={{background:T.surface2,borderRadius:10,padding:'12px 14px',marginBottom:14}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <span style={{fontSize:12,fontWeight:600,color:T.text}}>🔥 Consistencia hábitos</span>
+                <span style={{fontSize:14,fontWeight:800,color:weekSummary.habitPct>=70?T.accent:weekSummary.habitPct>=40?T.orange:T.red}}>{weekSummary.habitPct}%</span>
+              </div>
+              <div style={{height:6,background:T.border,borderRadius:3,overflow:'hidden'}}>
+                <div style={{height:'100%',width:`${weekSummary.habitPct}%`,background:weekSummary.habitPct>=70?T.accent:weekSummary.habitPct>=40?T.orange:T.red,borderRadius:3,transition:'width 0.6s'}}/>
+              </div>
+            </div>
+            {/* Metric deltas */}
+            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:8}}>📈 Tendencias de la semana</div>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {weekSummary.metricDeltas.map(m=>(
+                <div key={m.key} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:T.surface,borderRadius:9,border:`1px solid ${T.border}`}}>
+                  <span style={{fontSize:16}}>{m.icon}</span>
+                  <span style={{flex:1,fontSize:13,color:T.text}}>{m.label}</span>
+                  {m.delta!=null?(
+                    <span style={{fontSize:13,fontWeight:700,color:m.lowerBetter?(m.delta<=0?T.accent:T.red):(m.delta>=0?T.accent:T.red)}}>
+                      {m.delta>0?'▲':'▼'} {Math.abs(m.delta).toFixed(m.key==='pasos'?0:1)} {m.unit}
+                    </span>
+                  ):(
+                    <span style={{fontSize:11,color:T.dim}}>Sin datos esta semana</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+          {/* Workout streak visual */}
+          <Card style={{padding:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <span style={{fontWeight:600,fontSize:12,color:T.text}}>🔥 Racha de entrenamientos</span>
+              <div style={{display:'flex',gap:12}}>
+                <div style={{textAlign:'center'}}><div style={{fontSize:16,fontWeight:800,color:T.orange}}>{wStreak}d</div><div style={{fontSize:8,color:T.muted}}>Actual</div></div>
+                <div style={{textAlign:'center'}}><div style={{fontSize:16,fontWeight:800,color:T.purple}}>{wBestStreak}d</div><div style={{fontSize:8,color:T.muted}}>Máxima</div></div>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:3}}>
+              {wHeatmap.map((d,i)=>(
+                <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                  <div style={{width:'100%',height:18,borderRadius:4,background:d.count>0?T.accent:T.border,opacity:d.count>0?Math.min(0.5+d.count*0.25,1):0.25}} title={`${d.date}: ${d.count}`}/>
+                  <span style={{fontSize:7,color:d.date===today()?T.accent:T.dim}}>{d.label}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* ── GOALS ── */}
       {tab==='goals'&&(
         <Card style={{padding:18}}>
-          <div style={{fontWeight:700,fontSize:14,color:T.text,marginBottom:14}}>Metas de salud</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:14,color:T.text}}>Metas de salud</div>
+            <button onClick={()=>{setGoalForm({peso:hGoals.peso||75,sueño:hGoals.sueño||8,pasos:hGoals.pasos||10000,agua:hGoals.agua||2,entrenosSem:hGoals.entrenosSem||4});setGoalEditModal(true);}}
+              style={{fontSize:11,color:T.accent,background:`${T.accent}12`,border:`1px solid ${T.accent}30`,borderRadius:8,padding:'4px 12px',cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>
+              ✏️ Editar metas
+            </button>
+          </div>
           {GOALS.map(g=>(
             <div key={g.label} style={{marginBottom:16}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
@@ -7103,6 +7272,28 @@ const Health = ({data,setData,isMobile,onBack}) => {
           </div>
           <Input value={medForm.notes} onChange={v=>setMedForm(f=>({...f,notes:v}))} placeholder="Notas (p.ej: tomar con comida)"/>
           <Btn onClick={saveMed} style={{width:'100%',justifyContent:'center'}}>💊 Guardar</Btn>
+        </div>
+      </Modal>}
+      {goalEditModal&&<Modal title="✏️ Editar metas de salud" onClose={()=>setGoalEditModal(false)}>
+        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+          {[
+            {key:'peso',label:'⚖️ Peso objetivo',unit:'kg',placeholder:'75'},
+            {key:'sueño',label:'😴 Sueño objetivo',unit:'horas/noche',placeholder:'8'},
+            {key:'pasos',label:'👟 Pasos diarios',unit:'pasos',placeholder:'10000'},
+            {key:'agua',label:'💧 Agua diaria',unit:'litros',placeholder:'2'},
+            {key:'entrenosSem',label:'🏋️ Entrenos/semana',unit:'sesiones',placeholder:'4'},
+          ].map(g=>(
+            <div key={g.key}>
+              <label style={{fontSize:12,color:T.muted,display:'block',marginBottom:4}}>{g.label} ({g.unit})</label>
+              <Input type="number" value={goalForm[g.key]||''} onChange={v=>setGoalForm(f=>({...f,[g.key]:v}))} placeholder={g.placeholder}/>
+            </div>
+          ))}
+          <Btn onClick={()=>{
+            const upd={...hGoals};
+            Object.keys(goalForm).forEach(k=>{if(goalForm[k])upd[k]=Number(goalForm[k]);});
+            setData(d=>({...d,healthGoals:upd}));save('healthGoals',upd);
+            setGoalEditModal(false);toast.success('Metas de salud actualizadas');
+          }} style={{width:'100%',justifyContent:'center'}}>Guardar metas</Btn>
         </div>
       </Modal>}
     </div>
@@ -7673,18 +7864,18 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
       const def=initData();
-      const [areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,spTimeLogs,journal,books,shopping,education]=await Promise.all([
+      const [areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,healthGoals,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,spTimeLogs,journal,books,shopping,education]=await Promise.all([
         load('areas',def.areas),load('objectives',def.objectives),load('projects',def.projects),
         load('tasks',def.tasks),load('notes',def.notes),load('inbox',def.inbox),load('habits',def.habits),load('budget',def.budget),
         load('transactions',def.transactions),
-        load('healthMetrics',def.healthMetrics),load('medications',def.medications),load('workouts',def.workouts),
+        load('healthMetrics',def.healthMetrics),load('healthGoals',def.healthGoals),load('medications',def.medications),load('workouts',def.workouts),
         load('maintenances',def.maintenances),load('homeDocs',def.homeDocs),load('homeContacts',def.homeContacts),
         load('learnings',def.learnings),load('retros',def.retros),load('ideas',def.ideas),
         load('people',def.people),load('followUps',def.followUps),load('interactions',def.interactions),
         load('sideProjects',def.sideProjects),load('spTasks',def.spTasks),load('milestones',def.milestones),load('spTimeLogs',def.spTimeLogs),
         load('journal',def.journal),load('books',def.books),load('shopping',def.shopping),load('education',def.education),
       ]);
-      setData({areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,journal,books,shopping,education});
+      setData({areas,objectives,projects,tasks,notes,inbox,habits,budget,transactions,healthMetrics,healthGoals,medications,workouts,maintenances,homeDocs,homeContacts,learnings,retros,ideas,people,followUps,interactions,sideProjects,spTasks,milestones,journal,books,shopping,education});
     })();
   },[]);
 
