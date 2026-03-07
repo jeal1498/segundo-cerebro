@@ -3307,7 +3307,7 @@ const HabitTracker = ({data,setData,isMobile}) => {
 
 
 // ===================== GEMINI CONFIG =====================
-const GEMINI_MODEL='gemini-2.5-flash-lite';
+const GEMINI_MODEL='gemini-2.5-flash';
 
 
 // ===================== SETTINGS =====================
@@ -4040,12 +4040,21 @@ Si el usuario pregunta por gastos, salud, hábitos, proyectos, personas, etc:
 };
 
 const parsePsickeAction=(text)=>{
-  const m=text.match(/\`\`\`json\s*([\s\S]*?)\s*\`\`\`/);
-  if(!m)return null;
-  try{
-    const p=JSON.parse(m[1]);
-    if(p.action&&p.data)return p;
-  }catch(e){}
+  // Try standard ```json block first
+  const m=text.match(/```json\s*([\s\S]*?)\s*```/);
+  if(m){
+    try{const p=JSON.parse(m[1]);if(p.action&&p.data)return p;}catch(e){}
+  }
+  // Fallback: find raw JSON object with "action" key anywhere in text
+  const raw=text.match(/\{[\s\S]*?"action"\s*:\s*"[^"]+?"[\s\S]*?"data"\s*:[\s\S]*?\}(?=\s*$|\s*\n)/);
+  if(raw){
+    try{const p=JSON.parse(raw[0]);if(p.action&&p.data)return p;}catch(e){}
+  }
+  // Last resort: find any JSON object with action key
+  const any=text.match(/(\{[\s\S]*?"action"[\s\S]*?\})\s*$/);
+  if(any){
+    try{const p=JSON.parse(any[1]);if(p.action&&p.data)return p;}catch(e){}
+  }
   return null;
 };
 const stripPsickeJson=(text)=>{
@@ -4085,7 +4094,7 @@ const stripPsickeJson=(text)=>{
   }
 
   // 3. Strip JSON blocks
-  out=out.replace(/\`\`\`json[\s\S]*?\`\`\`/g,'');
+  out=out.replace(/```json[\s\S]*?```/g,'');
 
   return out.trim();
 };
@@ -4211,12 +4220,13 @@ const Psicke=({apiKey,onGoSettings,data,setData,openFromNav,onNavClose})=>{
         parts:[{text:(m.content||'').replace(/\n\n✅[^\n]*/g,'').trim()||' '}]
       }));
       const body={
+        system_instruction:{parts:[{text:sysPrompt}]},
         contents:[
-          {role:'user',parts:[{text:`[SISTEMA]\n${sysPrompt}\n\n[Confirma tu rol brevemente]`}]},
+          {role:'user',parts:[{text:'Hola Psicke, estoy listo.'}]},
           {role:'model',parts:[{text:'Aquí Psicke. ¿En qué está pensando?'}]},
           ...cleanMsgs
         ],
-        generationConfig:{temperature:0.8,maxOutputTokens:1400},
+        generationConfig:{temperature:0.7,maxOutputTokens:2500},
       };
 
       // API call with one retry on 429
